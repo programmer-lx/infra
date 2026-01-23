@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: ${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.arch }}-${{ matrix.build_type }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, Release]
+        include:
+          # ================= Windows 组合 =================
+          # MSVC 系列
+          - { os: windows-latest, compiler: msvc, arch: x64 }
+          - { os: windows-latest, compiler: msvc, arch: x86 }
+          - { os: windows-latest, compiler: msvc, arch: arm64 } # 交叉编译
+
+          # MinGW 系列 (通常只有 x64 和 x86)
+          - { os: windows-latest, compiler: mingw, arch: x64, cc: gcc, cxx: g++ }
+          - { os: windows-latest, compiler: mingw, arch: x86, cc: gcc, cxx: g++ }
+
+          # Clang (Windows 下使用 clang-cl)
+          - { os: windows-latest, compiler: clang, arch: x64, cc: clang-cl, cxx: clang-cl }
+
+          # ================= Ubuntu 组合 =================
+          # GCC 系列
+          - { os: ubuntu-latest, compiler: gcc, arch: x64, cc: gcc, cxx: g++ }
+          - { os: ubuntu-latest, compiler: gcc, arch: x86, cc: gcc-multilib, cxx: g++-multilib }
+          - { os: ubuntu-latest, compiler: gcc, arch: arm64, cc: aarch64-linux-gnu-gcc, cxx: aarch64-linux-gnu-g++ } # 交叉编译
+          - { os: ubuntu-latest, compiler: gcc, arch: arm32, cc: arm-linux-gnueabihf-gcc, cxx: arm-linux-gnueabihf-g++ } # 交叉编译
+
+          # Clang 系列
+          - { os: ubuntu-latest, compiler: clang, arch: x64, cc: clang, cxx: clang++ }
+          - { os: ubuntu-latest, compiler: clang, arch: arm64, cc: clang, cxx: clang++, target: aarch64-linux-gnu }
+
+          # ================= MacOS 组合 =================
+          # Apple Clang (支持 Universal Binary 或指定架构)
+          - { os: macos-latest, compiler: apple-clang, arch: x64, cc: clang, cxx: clang++ }
+          - { os: macos-latest, compiler: apple-clang, arch: arm64, cc: clang, cxx: clang++ }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux Cross Compilers
+        if: runner.os == 'Linux' && (matrix.arch == 'arm64' || matrix.arch == 'arm32' || matrix.arch == 'x86')
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          elif [ "${{ matrix.arch }}" = "arm32" ]; then
+            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+          elif [ "${{ matrix.arch }}" = "x86" ]; then
+            sudo apt-get install -y gcc-multilib g++-multilib
+          fi
+
+      - name: Setup MSVC
+        if: matrix.compiler == 'msvc' || matrix.cc == 'clang-cl'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch == 'arm64' && 'arm64' || (matrix.arch == 'x86' && 'x86' || 'x64') }}
+
+      - name: Setup MinGW
+        if: matrix.compiler == 'mingw'
+        uses: egor-tensin/setup-gcc@v1
+        with:
+          platform: ${{ matrix.arch }}
+
+      # --- CMake 配置 ---
+      - name: Configure CMake
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          # 基础参数
+          CMAKE_FLAGS="-G Ninja Multi-Config"
+          
+          # 针对 MSVC 架构的处理
+          if [ "${{ matrix.compiler }}" = "msvc" ]; then
+            CMAKE_FLAGS="$CMAKE_FLAGS -A ${{ matrix.arch == 'x64' && 'x64' || (matrix.arch == 'arm64' && 'ARM64' || 'Win32') }}"
+          fi
+
+          # 针对 Linux 交叉编译的处理
+          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.arch }}" != "x64" ]; then
+            CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }}"
+          fi
+
+          # 针对 MacOS 架构的处理
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
+          fi
+
+          cmake -S . -B build -DINFRA_BUILD_TESTS=ON $CMAKE_FLAGS
+
+      # --- 构建 ---
+      - name: Build
+        run: |
+          cmake --build build --config ${{ matrix.build_type }}
+
+      # --- 测试 (仅在架构匹配时运行) ---
+      - name: Run Tests
+        shell: bash
+        run: |
+          # 定义是否可以运行测试的逻辑
+          CAN_RUN=true
+          if [ "${{ matrix.arch }}" = "arm64" ] || [ "${{ matrix.arch }}" = "arm32" ]; then
+            # 如果是 ARM 且当前运行器是 x64，则跳过测试（除非你有 QEMU）
+            if [ "${{ runner.arch }}" != "ARM64" ]; then CAN_RUN=false; fi
+          fi
+          
+          if [ "$CAN_RUN" = true ]; then
+            cd build
+            ctest -C ${{ matrix.build_type }} --output-on-failure
+          else
+            echo "Skipping tests for cross-compiled architecture: ${{ matrix.arch }}"
+          fi

@@ -1,0 +1,18 @@
+function(infra_add_test cpp_name)
+    add_executable(${cpp_name} ${cpp_name}.cpp)
+
+    if(MSVC)
+        target_compile_options(${cpp_name} PRIVATE /utf-8 /W4 /WX)
+        target_link_options(${cpp_name} PRIVATE /WX)
+        target_compile_definitions(${cpp_name} PRIVATE UNICODE _UNICODE)
+    else()
+        target_compile_options(${cpp_name} PRIVATE -Werror -Wall)
+    endif()
+
+    target_link_libraries(${cpp_name} PRIVATE infra)
+    add_test(NAME ${cpp_name} COMMAND $<TARGET_FILE:${cpp_name}>)
+endfunction()
+
+infra_add_test(compile_succeed)
+infra_add_test(x86_64)
+infra_add_test(x86_32)

@@ -1,7 +1,7 @@
 #include <cassert>
 
-#include <infra/cpu/info.hpp>
-#include <infra/platform/arch.hpp>
+#include <infra/arch.hpp>
+#include <infra/cpu.hpp>
 
 #if INFRA_ARCH_X86_64
 
@@ -9,7 +9,7 @@
 
 int main()
 {
-    const infra::cpu::Info info = infra::cpu::info();
+    const infra::CpuInfo info = infra::cpu_info();
 
     // check intrinsics
     assert(info.FXSR && info.SSE && info.SSE2);

@@ -1,21 +1,20 @@
 #include <cstdlib>
-#include <bit>
+#include <cassert>
 
+#include <bit>
 #include <random>
 #include <iostream>
 
-#include <infra/platform/arch.hpp>
-#include <infra/platform/compiler.hpp>
-#include <infra/platform/os.hpp>
-
-#include <infra/cpu/info.hpp>
-#include <infra/cpu/hint.hpp>
-
-#include <infra/attributes/attributes.hpp>
-
-#include <infra/memory/memory.hpp>
-
-#include <infra/assert/assert.hpp>
+#include <infra/arch.hpp>
+#include <infra/assert.hpp>
+#include <infra/attributes.hpp>
+#include <infra/compiler.hpp>
+#include <infra/cpu.hpp>
+#include <infra/encoding.hpp>
+#include <infra/endian.hpp>
+#include <infra/memory.hpp>
+#include <infra/meta.hpp>
+#include <infra/os.hpp>
 
 // os
 #if INFRA_OS_WINDOWS
@@ -135,7 +134,7 @@ void debug_break_test()
 
 void aligned_malloc_test()
 {
-    void* mem = infra::memory::aligned_malloc(1024, 64);
+    void* mem = infra::aligned_malloc(1024, 64);
     if (mem != nullptr)
     {
         uintptr_t address = std::bit_cast<uintptr_t>(mem);
@@ -143,7 +142,7 @@ void aligned_malloc_test()
         {
             throw std::runtime_error("");
         }
-        infra::memory::aligned_free(mem);
+        infra::aligned_free(mem);
     }
     else
     {
@@ -168,13 +167,69 @@ void pause_test()
     int i = 100;
     while (i--)
     {
-        infra::cpu::pause();
+        infra::cpu_pause();
     }
 }
 
 void restrict_test(int* INFRA_RESTRICT a)
 {
     (void)a;
+}
+
+void endian_test()
+{
+    {
+        uint32_t a = 0x01020304;
+        infra::detail::reverse_bytes(&a, sizeof(uint32_t));
+        uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
+        assert(pa[0] == 0x01);
+        assert(pa[1] == 0x02);
+        assert(pa[2] == 0x03);
+        assert(pa[3] == 0x04);
+    }
+
+    if constexpr (infra::CurrentEndian == infra::Endian::Little)
+    {
+        uint32_t a = 0x01020304;
+        uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
+        assert(pa[0] == 0x04);
+        assert(pa[1] == 0x03);
+        assert(pa[2] == 0x02);
+        assert(pa[3] == 0x01);
+
+        infra::to_little_endian(&a, sizeof(a));
+        assert(a == 0x01020304);
+
+        infra::to_big_endian(&a, sizeof(a));
+        assert(a == 0x04030201);
+    }
+
+    if constexpr (infra::CurrentEndian == infra::Endian::Big)
+    {
+        uint32_t a = 0x01020304;
+        uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
+        assert(pa[0] == 0x01);
+        assert(pa[1] == 0x02);
+        assert(pa[2] == 0x03);
+        assert(pa[3] == 0x04);
+
+        infra::to_big_endian(&a, sizeof(a));
+        assert(a == 0x01020304);
+
+        infra::to_little_endian(&a, sizeof(a));
+        assert(a == 0x04030201);
+    }
+
+    // runtime check
+    infra::Endian endian = infra::runtime_check_endian();
+    if constexpr (infra::CurrentEndian == infra::Endian::Little)
+    {
+        assert(endian == infra::Endian::Little);
+    }
+    else
+    {
+        assert(endian == infra::Endian::Big);
+    }
 }
 
 int main()
@@ -201,6 +256,8 @@ int main()
 
         pause_test();
         restrict_test(nullptr);
+
+        endian_test();
     }
     catch (std::exception& e)
     {

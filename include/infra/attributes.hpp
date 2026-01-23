@@ -1,6 +1,6 @@
 #pragma once
 
-#include "infra/platform/compiler.hpp"
+#include "compiler.hpp"
 
 // inline | noinline | flatten
 #if INFRA_COMPILER_MSVC

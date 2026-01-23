@@ -5,7 +5,8 @@
 
 #include <type_traits>
 
-#include "infra/platform/arch.hpp"
+#include "arch.hpp"
+#include "attributes.hpp"
 
 #if INFRA_ARCH_X86
     #if defined(_MSC_VER)
@@ -13,9 +14,10 @@
     #else
         #include <cpuid.h>
     #endif
+    #include <emmintrin.h>
 #endif
 
-namespace infra::cpu
+namespace infra
 {
     namespace detail
     {
@@ -91,7 +93,7 @@ namespace infra::cpu
 
 #if INFRA_ARCH_X86
         // leaf: EAX, sub_leaf: ECX
-        inline void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t* abcd)
+        inline void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t* abcd) noexcept
         {
 #if defined(_MSC_VER)
             int regs[4];
@@ -113,7 +115,7 @@ namespace infra::cpu
 #endif
         }
 
-        inline uint64_t xgetbv(uint32_t idx)
+        inline uint64_t xgetbv(uint32_t idx) noexcept
         {
 #if defined(_MSC_VER)
             return _xgetbv(idx);
@@ -133,7 +135,7 @@ namespace infra::cpu
         AMD
     };
 
-    struct Info
+    struct CpuInfo
     {
         static constexpr unsigned Scalar = 1;
 
@@ -172,11 +174,11 @@ namespace infra::cpu
         // ------------------ arm features ------------------
         unsigned NEON       : 1 = 0;
     };
-    static_assert(std::is_standard_layout_v<Info> && std::is_trivially_copyable_v<Info>);
+    static_assert(std::is_standard_layout_v<CpuInfo> && std::is_trivially_copyable_v<CpuInfo>);
 
-    inline Info info() noexcept
+    inline CpuInfo cpu_info() noexcept
     {
-        Info result{};
+        CpuInfo result{};
 
 #if INFRA_ARCH_X86
         uint32_t abcd[4]; // eax, ebx, ecx, edx
@@ -282,5 +284,30 @@ namespace infra::cpu
 #endif
 
         return result;
+    }
+
+    namespace detail
+    {
+#if INFRA_ARCH_X86
+        INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE2 static void cpu_pause_impl() noexcept
+        {
+            _mm_pause();
+        }
+#endif
+    }
+
+    inline void cpu_pause() noexcept
+    {
+#if INFRA_ARCH_X86
+        static const CpuInfo info = cpu_info();
+        if (info.SSE2)
+        {
+            detail::cpu_pause_impl();
+        }
+#elif INFRA_ARCH_ARM
+        __asm__ __volatile__ ("yield");
+#else
+        // empty
+#endif
     }
 }

@@ -3,7 +3,9 @@
 #include <cstdlib>
 #include <cstddef>
 
-namespace infra::memory
+#include "os.hpp"
+
+namespace infra
 {
     inline void* aligned_malloc(size_t size, size_t alignment) noexcept
     {

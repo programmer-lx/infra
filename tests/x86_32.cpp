@@ -1,5 +1,5 @@
-#include <infra/cpu/info.hpp>
-#include <infra/platform/arch.hpp>
+#include <infra/arch.hpp>
+#include <infra/cpu.hpp>
 
 #if INFRA_ARCH_X86_32
 #include <mmintrin.h>

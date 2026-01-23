@@ -23,9 +23,8 @@ namespace infra::cpu
 
     inline void pause()
     {
-        static const Info cpu_info = info();
-
 #if INFRA_ARCH_X86
+        static const Info cpu_info = info();
         if (cpu_info.SSE2)
         {
             detail::pause_impl();

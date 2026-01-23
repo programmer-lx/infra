@@ -13,110 +13,148 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # 只保留 build_type 作为基础维度，它会与 include 里的每一项交叉组合
         build_type: [Debug, Release]
         include:
-          # ================= Windows 组合 =================
-          # MSVC 系列
-          - { os: windows-latest, compiler: msvc, arch: x64 }
-          - { os: windows-latest, compiler: msvc, arch: x86 }
-          - { os: windows-latest, compiler: msvc, arch: arm64 } # 交叉编译
+          # --- Windows MSVC (x86, x64, ARM64) ---
+          - os: windows-latest
+            compiler: msvc
+            arch: x64
+          - os: windows-latest
+            compiler: msvc
+            arch: x86
+          - os: windows-latest
+            compiler: msvc
+            arch: arm64
 
-          # MinGW 系列 (通常只有 x64 和 x86)
-          - { os: windows-latest, compiler: mingw, arch: x64, cc: gcc, cxx: g++ }
-          - { os: windows-latest, compiler: mingw, arch: x86, cc: gcc, cxx: g++ }
+          # --- Windows MinGW (x86, x64) ---
+          - os: windows-latest
+            compiler: mingw
+            arch: x64
+            cc: gcc
+            cxx: g++
+          - os: windows-latest
+            compiler: mingw
+            arch: x86
+            cc: gcc
+            cxx: g++
 
-          # Clang (Windows 下使用 clang-cl)
-          - { os: windows-latest, compiler: clang, arch: x64, cc: clang-cl, cxx: clang-cl }
+          # --- Ubuntu GCC (x64, x86, ARM32, ARM64) ---
+          - os: ubuntu-latest
+            compiler: gcc
+            arch: x64
+            cc: gcc
+            cxx: g++
+          - os: ubuntu-latest
+            compiler: gcc
+            arch: x86
+            cc: gcc
+            cxx: g++
+          - os: ubuntu-latest
+            compiler: gcc
+            arch: arm64
+            cc: aarch64-linux-gnu-gcc
+            cxx: aarch64-linux-gnu-g++
+          - os: ubuntu-latest
+            compiler: gcc
+            arch: arm32
+            cc: arm-linux-gnueabihf-gcc
+            cxx: arm-linux-gnueabihf-g++
 
-          # ================= Ubuntu 组合 =================
-          # GCC 系列
-          - { os: ubuntu-latest, compiler: gcc, arch: x64, cc: gcc, cxx: g++ }
-          - { os: ubuntu-latest, compiler: gcc, arch: x86, cc: gcc-multilib, cxx: g++-multilib }
-          - { os: ubuntu-latest, compiler: gcc, arch: arm64, cc: aarch64-linux-gnu-gcc, cxx: aarch64-linux-gnu-g++ } # 交叉编译
-          - { os: ubuntu-latest, compiler: gcc, arch: arm32, cc: arm-linux-gnueabihf-gcc, cxx: arm-linux-gnueabihf-g++ } # 交叉编译
+          # --- Ubuntu Clang (x64, ARM64) ---
+          - os: ubuntu-latest
+            compiler: clang
+            arch: x64
+            cc: clang
+            cxx: clang++
+          - os: ubuntu-latest
+            compiler: clang
+            arch: arm64
+            cc: clang
+            cxx: clang++
 
-          # Clang 系列
-          - { os: ubuntu-latest, compiler: clang, arch: x64, cc: clang, cxx: clang++ }
-          - { os: ubuntu-latest, compiler: clang, arch: arm64, cc: clang, cxx: clang++, target: aarch64-linux-gnu }
-
-          # ================= MacOS 组合 =================
-          # Apple Clang (支持 Universal Binary 或指定架构)
-          - { os: macos-latest, compiler: apple-clang, arch: x64, cc: clang, cxx: clang++ }
-          - { os: macos-latest, compiler: apple-clang, arch: arm64, cc: clang, cxx: clang++ }
+          # --- MacOS Apple-Clang (x64, ARM64) ---
+          - os: macos-latest
+            compiler: apple-clang
+            arch: x64
+            cc: clang
+            cxx: clang++
+          - os: macos-latest
+            compiler: apple-clang
+            arch: arm64
+            cc: clang
+            cxx: clang++
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Linux Cross Compilers
-        if: runner.os == 'Linux' && (matrix.arch == 'arm64' || matrix.arch == 'arm32' || matrix.arch == 'x86')
+      - name: Install Linux Multi-arch Support
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
+          if [ "${{ matrix.arch }}" = "x86" ]; then
+            sudo apt-get install -y gcc-multilib g++-multilib
+          elif [ "${{ matrix.arch }}" = "arm64" ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
           elif [ "${{ matrix.arch }}" = "arm32" ]; then
             sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-          elif [ "${{ matrix.arch }}" = "x86" ]; then
-            sudo apt-get install -y gcc-multilib g++-multilib
           fi
 
+      # --- 2. 编译器环境初始化 ---
       - name: Setup MSVC
-        if: matrix.compiler == 'msvc' || matrix.cc == 'clang-cl'
+        if: matrix.compiler == 'msvc'
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ matrix.arch == 'arm64' && 'arm64' || (matrix.arch == 'x86' && 'x86' || 'x64') }}
+          arch: ${{ matrix.arch }}
 
-      - name: Setup MinGW
-        if: matrix.compiler == 'mingw'
-        uses: egor-tensin/setup-gcc@v1
-        with:
-          platform: ${{ matrix.arch }}
-
-      # --- CMake 配置 ---
+      # --- 3. CMake 配置 ---
       - name: Configure CMake
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
+        shell: bash
         run: |
-          # 基础参数
-          CMAKE_FLAGS="-G Ninja Multi-Config"
-          
-          # 针对 MSVC 架构的处理
+          # 初始参数：使用 Ninja Multi-Config 提高效率
+          CMAKE_ARGS="-G \"Ninja Multi-Config\""
+
+          # Windows MSVC 架构指定
           if [ "${{ matrix.compiler }}" = "msvc" ]; then
-            CMAKE_FLAGS="$CMAKE_FLAGS -A ${{ matrix.arch == 'x64' && 'x64' || (matrix.arch == 'arm64' && 'ARM64' || 'Win32') }}"
+            ARCH_ARG=$([ "${{ matrix.arch }}" = "x86" ] && echo "Win32" || echo "${{ matrix.arch }}")
+            CMAKE_ARGS="$CMAKE_ARGS -A $ARCH_ARG"
           fi
 
-          # 针对 Linux 交叉编译的处理
-          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.arch }}" != "x64" ]; then
-            CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }}"
-          fi
-
-          # 针对 MacOS 架构的处理
+          # MacOS 架构指定
           if [ "${{ runner.os }}" = "macOS" ]; then
-            CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}"
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch == 'x64' && 'x86_64' || 'arm64' }}"
           fi
 
-          cmake -S . -B build -DINFRA_BUILD_TESTS=ON $CMAKE_FLAGS
+          # Linux 交叉编译基础标志
+          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.arch }}" != "x64" ] && [ "${{ matrix.arch }}" != "x86" ]; then
+            CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.arch }}"
+          fi
 
-      # --- 构建 ---
+          eval cmake -S . -B build $CMAKE_ARGS
+
+      # --- 4. 构建 ---
       - name: Build
         run: |
           cmake --build build --config ${{ matrix.build_type }}
 
-      # --- 测试 (仅在架构匹配时运行) ---
+      # --- 5. 运行测试 ---
       - name: Run Tests
         shell: bash
         run: |
-          # 定义是否可以运行测试的逻辑
-          CAN_RUN=true
+          # 仅在宿主机架构匹配时运行测试（交叉编译无法直接运行）
+          RUN_TEST=true
           if [ "${{ matrix.arch }}" = "arm64" ] || [ "${{ matrix.arch }}" = "arm32" ]; then
-            # 如果是 ARM 且当前运行器是 x64，则跳过测试（除非你有 QEMU）
-            if [ "${{ runner.arch }}" != "ARM64" ]; then CAN_RUN=false; fi
+             if [ "${{ runner.arch }}" != "ARM64" ]; then RUN_TEST=false; fi
           fi
-          
-          if [ "$CAN_RUN" = true ]; then
+          if [ "${{ matrix.arch }}" = "x86" ] && [ "${{ runner.os }}" = "Windows" ]; then RUN_TEST=true; fi
+
+          if [ "$RUN_TEST" = true ]; then
             cd build
             ctest -C ${{ matrix.build_type }} --output-on-failure
           else
-            echo "Skipping tests for cross-compiled architecture: ${{ matrix.arch }}"
+            echo "Skipping tests: Cross-compiled architecture cannot run on this runner."
           fi

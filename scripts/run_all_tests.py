@@ -36,6 +36,11 @@ def get_compiler_configs(test_mode):
             ("Clang-17", "clang-17", "clang++-17", "clang17"),
             ("GCC-13", "gcc-13", "g++-13", "gcc13")
         ]
+    elif OS_NAME == "darwin": # MacOS
+        print("--- macOS Environment Detected ---")
+        all_configs = [
+            ("Clang", "clang", "clang++", "clang")
+        ]
     else:
         raise RuntimeError(f"Unsupported platform: {OS_NAME}.")
     

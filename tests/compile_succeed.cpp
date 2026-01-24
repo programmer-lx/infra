@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <cassert>
 
+#include <vector>
 #include <bit>
 #include <random>
 #include <iostream>
@@ -384,6 +385,92 @@ void class_functor_test()
     }
 }
 
+struct TestClass
+{
+    double a;
+};
+
+void member_traits_test()
+{
+    {
+        using traits = infra::meta::class_member_traits<decltype(&TestClass::a)>;
+
+        static_assert(std::is_same_v<typename traits::value_type, double>);
+        static_assert(std::is_same_v<typename traits::class_type, TestClass>);
+    }
+}
+
+void is_specialization_of_test()
+{
+    static_assert(infra::meta::is_specialization_of<std::vector<int>, std::vector>::value);
+}
+
+template<typename T>
+struct is_not_integral
+{
+    static constexpr bool value = !std::is_integral_v<T>;
+};
+
+void type_list_test()
+{
+    {
+        using list = infra::meta::type_list<int, int, float, double, float, double>;
+
+        static_assert(std::is_same_v<typename list::type_at_index<2>, float>);
+        static_assert(list::contains<double>);
+        static_assert(list::contains<bool> == false);
+        static_assert(list::size == 6);
+        static_assert(list::first_index_of<int> == 0);
+        static_assert(list::last_index_of<float> == 4);
+        static_assert(list::last_index_of<int> == 1);
+        static_assert(list::last_index_of<bool> == -1);
+        static_assert(list::count_of<int> == 2);
+    }
+
+    {
+        using l1 = infra::meta::type_list<int, float, int>;
+        using l_concat = typename infra::meta::type_list_concat<l1>::type;
+        static_assert(std::is_same_v<l_concat, infra::meta::type_list<int, float, int>>);
+    }
+    {
+        // concat
+        using l1 = infra::meta::type_list<int, float, int>;
+        using l2 = infra::meta::type_list<bool, double, bool>;
+        using l_concat = typename infra::meta::type_list_concat<l1, l2>::type;
+        static_assert(std::is_same_v<l_concat, infra::meta::type_list<int, float, int, bool, double, bool>>);
+    }
+    {
+        using l1 = infra::meta::type_list<int, float, int>;
+        using l2 = infra::meta::type_list<bool, double, bool>;
+        using l3 = infra::meta::type_list<std::string>;
+        using l4 = infra::meta::type_list<std::string_view>;
+        using l_concat = typename infra::meta::type_list_concat<l1, l2, l3, l4>::type;
+        static_assert(std::is_same_v<l_concat, infra::meta::type_list<int, float, int, bool, double, bool, std::string, std::string_view>>);
+    }
+
+    {
+        // extract conditionally
+        using l1 = infra::meta::type_list<int, float, int, double>;
+        using l2 = typename infra::meta::type_list_includes_cond<l1, std::is_integral>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<int, int>>);
+
+        using l3 = infra::meta::type_list_excludes_cond<l1, std::is_integral>::type;
+        static_assert(std::is_same_v<l3, infra::meta::type_list<float, double>>);
+    }
+
+    {
+        // exclude
+        using l1 = infra::meta::type_list<int, float, int, double>;
+        using l2 = typename infra::meta::type_list_exclude_types<l1, int>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<float, double>>);
+    }
+    {
+        using l1 = infra::meta::type_list<int, float, bool, float, int, double>;
+        using l2 = typename infra::meta::type_list_exclude_types<l1, int, bool>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<float, float, double>>);
+    }
+}
+
 void encoding_test()
 {
     const char8_t ascii[] = u8"Hello";
@@ -449,6 +536,9 @@ int main()
 
         global_functor_test();
         class_functor_test();
+        member_traits_test();
+        is_specialization_of_test();
+        type_list_test();
 
         encoding_test();
     }

@@ -130,7 +130,7 @@ namespace infra::cpu
 #endif // INFRA_ARCH_X86
     }
 
-    enum class Vendor : uint8_t
+    enum class Vendor
     {
         Unknown = 0,
         Intel,
@@ -142,39 +142,43 @@ namespace infra::cpu
         static constexpr unsigned Scalar = 1;
 
         // ------------------ common info ------------------
-        char vendor_name[13] = {};
-        Vendor vendor = Vendor::Unknown;
+        Vendor   vendor             = Vendor::Unknown;
+        char     vendor_name[13]    = {};
+        unsigned logical_cores      = 0;
+        unsigned physical_cores     = 0;
+
+        unsigned hyper_threads  : 1 = 0;
 
         // ------------------ x86 features ------------------
-        unsigned FXSR       : 1 = 0;
+        unsigned fxsr           : 1 = 0;
 
         // SSE family
-        unsigned SSE        : 1 = 0;
-        unsigned SSE2       : 1 = 0;
-        unsigned SSE3       : 1 = 0;
-        unsigned SSSE3      : 1 = 0;
-        unsigned SSE4_1     : 1 = 0;
-        unsigned SSE4_2     : 1 = 0;
+        unsigned sse            : 1 = 0;
+        unsigned sse2           : 1 = 0;
+        unsigned sse3           : 1 = 0;
+        unsigned ssse3          : 1 = 0;
+        unsigned sse4_1         : 1 = 0;
+        unsigned sse4_2         : 1 = 0;
 
         // XSAVE & OS_XSAVE
-        unsigned XSAVE      : 1 = 0;
-        unsigned OS_XSAVE   : 1 = 0;
+        unsigned xsave          : 1 = 0;
+        unsigned os_xsave       : 1 = 0;
 
         // AVX family
-        unsigned AVX        : 1 = 0;
-        unsigned F16C       : 1 = 0;
-        unsigned FMA3       : 1 = 0;
-        unsigned AVX2       : 1 = 0;
+        unsigned avx            : 1 = 0;
+        unsigned f16c           : 1 = 0;
+        unsigned fma3           : 1 = 0;
+        unsigned avx2           : 1 = 0;
 
         // AVX-512 family
-        unsigned AVX512_F   : 1 = 0;
+        unsigned avx512_f       : 1 = 0;
 
         // other
-        unsigned AES_NI     : 1 = 0;
-        unsigned SHA        : 1 = 0;
+        unsigned aes_ni         : 1 = 0;
+        unsigned sha            : 1 = 0;
 
         // ------------------ arm features ------------------
-        unsigned NEON       : 1 = 0;
+        unsigned neon           : 1 = 0;
     };
     static_assert(std::is_standard_layout_v<Info> && std::is_trivially_copyable_v<Info>);
 
@@ -184,22 +188,22 @@ namespace infra::cpu
 
 #if INFRA_ARCH_X86
         uint32_t abcd[4]; // eax, ebx, ecx, edx
-        uint32_t ebx = 0;
-        uint32_t ecx = 0;
-        uint32_t edx = 0;
 
         detail::cpuid(0, 0, abcd);
+        // 如果 max_leaf == 13，则可以调用 cpuid 查询的EAX的范围是 [0, 13]
         const uint32_t max_leaf = abcd[0];
+
         uint64_t xcr0 = 0;
         bool os_support_avx = false;
+        uint32_t eax1_ecx0_edx = 0; // EAX 1, ECX 0 的 EDX 值
 
         // ------------------ EAX 0 ------------------
-        if (max_leaf > 0)
+        // if (max_leaf >= 0)
         {
             // vendor name
-            ebx = abcd[1];
-            ecx = abcd[2];
-            edx = abcd[3];
+            const uint32_t ebx = abcd[1];
+            const uint32_t ecx = abcd[2];
+            const uint32_t edx = abcd[3];
             memcpy(result.vendor_name, &ebx, sizeof(uint32_t));
             memcpy(result.vendor_name + sizeof(uint32_t), &edx, sizeof(uint32_t));
             memcpy(result.vendor_name + 2 * sizeof(uint32_t), &ecx, sizeof(uint32_t));
@@ -220,29 +224,33 @@ namespace infra::cpu
         }
 
         // ------------------ EAX 1 ------------------
-        if (max_leaf > 1)
+        if (max_leaf >= 1)
         {
             // EAX 1, ECX 0
             detail::cpuid(1, 0, abcd);
-            ecx = abcd[2];
-            edx = abcd[3];
+            const uint32_t ebx = abcd[1];
+            const uint32_t ecx = abcd[2];
+            const uint32_t edx = abcd[3];
+            eax1_ecx0_edx = edx;
+
+            result.logical_cores = (ebx >> 16) & 0xff; // EBX[23:16]
 
             // ------------------------- FXSR -------------------------
-            result.FXSR = detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::FXSR);
+            result.fxsr = detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::FXSR);
 
             // ------------------------- SSE family -------------------------
-            result.SSE = result.FXSR && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::SSE);
-            result.SSE2 = result.SSE && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::SSE2);
-            result.SSE3 = result.SSE2 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE3);
-            result.SSSE3 = result.SSE3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSSE3);
-            result.SSE4_1 = result.SSSE3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE4_1);
-            result.SSE4_2 = result.SSE4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE4_2);
+            result.sse = result.fxsr && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::SSE);
+            result.sse2 = result.sse && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::SSE2);
+            result.sse3 = result.sse2 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE3);
+            result.ssse3 = result.sse3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSSE3);
+            result.sse4_1 = result.ssse3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE4_1);
+            result.sse4_2 = result.sse4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE4_2);
 
             // ------------------------- XSAVE -------------------------
-            result.XSAVE = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::XSAVE);
-            result.OS_XSAVE = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::OS_XSAVE);
+            result.xsave = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::XSAVE);
+            result.os_xsave = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::OS_XSAVE);
             // 只有在 xsave 和 os_xsave 为 true 的时候，才能进行 xgetbv 检查，AVX指令集才可用
-            if (result.XSAVE && result.OS_XSAVE)
+            if (result.xsave && result.os_xsave)
             {
                 xcr0 = detail::xgetbv(0);
             }
@@ -251,22 +259,34 @@ namespace infra::cpu
             os_support_avx = detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::SSE) &&
                              detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::AVX);
 
-            result.AVX = result.SSE4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::AVX) && os_support_avx;
-            result.F16C = result.AVX && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::F16C);
-            result.FMA3 = result.AVX && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::FMA3);
+            result.avx = result.sse4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::AVX) && os_support_avx;
+            result.f16c = result.avx && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::F16C);
+            result.fma3 = result.avx && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::FMA3);
 
             // other
-            result.AES_NI = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::AES_NI);
+            result.aes_ni = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::AES_NI);
+        }
+
+        // ------------------ EAX 4 ------------------
+        if (max_leaf >= 4)
+        {
+            detail::cpuid(4, 0, abcd);
+            const uint32_t eax = abcd[0];
+
+            if (result.vendor == Vendor::Intel)
+            {
+                result.physical_cores = ((eax >> 26) & 0x3f) + 1; // EAX[31:26] + 1
+            }
         }
 
         // ------------------ EAX 7 ------------------
-        if (max_leaf > 7)
+        if (max_leaf >= 7)
         {
             // EAX 7, ECX 0
             detail::cpuid(7, 0, abcd);
-            ebx = abcd[1];
+            const uint32_t ebx = abcd[1];
 
-            result.AVX2 = result.AVX && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::AVX2);
+            result.avx2 = result.avx && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::AVX2);
 
 
             // ------------------------- AVX-512 family -------------------------
@@ -275,10 +295,30 @@ namespace infra::cpu
                                             detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::AVX_512_LOW_256) &&
                                             detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::AVX_512_HIGH_256);
 
-            result.AVX512_F = result.AVX2 && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::AVX_512_F) && os_support_avx_512;
+            result.avx512_f = result.avx2 && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::AVX_512_F) && os_support_avx_512;
 
             // other
-            result.SHA = detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::SHA);
+            result.sha = detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::SHA);
+        }
+
+        // ------------------------------------ ext ------------------------------------
+        detail::cpuid(0x80000000, 0, abcd);
+        const uint32_t max_ext_leaf = abcd[0];
+
+        // ------------------ EAX 0x8000'0008 ------------------
+        if (max_ext_leaf >= 0x80000008)
+        {
+            if (result.vendor == Vendor::AMD)
+            {
+                detail::cpuid(0x80000008, 0, abcd);
+                const uint32_t ecx = abcd[2];
+                result.physical_cores = (ecx & 0xff) + 1; // ECX[7:0] + 1
+            }
+        }
+
+        if (max_leaf >= 1)
+        {
+            result.hyper_threads = (eax1_ecx0_edx & (1 << 28)) && (result.physical_cores < result.logical_cores);
         }
 
 #elif INFRA_ARCH_ARM
@@ -302,7 +342,7 @@ namespace infra::cpu
     {
 #if INFRA_ARCH_X86
         static const Info cpu_info = info();
-        if (cpu_info.SSE2)
+        if (cpu_info.sse2)
         {
             detail::cpu_pause_impl();
         }

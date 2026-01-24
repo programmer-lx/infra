@@ -27,11 +27,5 @@
 
 
 // check
-
-// gcc
-static_assert((INFRA_COMPILER_CLANG + INFRA_COMPILER_MSVC + INFRA_COMPILER_GCC) == 1,
-    "Only one compiler macro can be defined.");
-
-// mingw
-static_assert((INFRA_COMPILER_CLANG + INFRA_COMPILER_MSVC + INFRA_COMPILER_MINGW) == 1,
+static_assert((INFRA_COMPILER_CLANG + INFRA_COMPILER_MSVC + (INFRA_COMPILER_GCC || INFRA_COMPILER_MINGW)) == 1,
     "Only one compiler macro can be defined.");

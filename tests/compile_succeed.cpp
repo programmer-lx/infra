@@ -258,6 +258,9 @@ void global_functor_test()
         static_assert(std::is_same_v<typename traits::class_type, void>);
         static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::global_function_arg0)>, void>);
 
+        static_assert(traits::is_member_function == false);
+        static_assert(infra::meta::callable_is_member_function_v<decltype(&meta_test::global_function_arg0)> == false);
+
         static_assert(traits::arg_count == 0);
         static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::global_function_arg0)> == 0);
     }
@@ -273,6 +276,9 @@ void global_functor_test()
 
         static_assert(std::is_same_v<typename traits::class_type, void>);
         static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::global_function_arg2)>, void>);
+
+        static_assert(traits::is_member_function == false);
+        static_assert(infra::meta::callable_is_member_function_v<decltype(&meta_test::global_function_arg2)> == false);
 
         static_assert(traits::arg_count == 2);
         static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::global_function_arg2)> == 2);
@@ -290,6 +296,9 @@ void global_functor_test()
         static_assert(std::is_same_v<typename traits::class_type, void>);
         static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::global_function_arg2_ret)>, void>);
 
+        static_assert(traits::is_member_function == false);
+        static_assert(infra::meta::callable_is_member_function_v<decltype(&meta_test::global_function_arg2_ret)> == false);
+
         static_assert(traits::arg_count == 2);
         static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::global_function_arg2_ret)> == 2);
     }
@@ -305,6 +314,9 @@ void global_functor_test()
 
         static_assert(std::is_same_v<typename traits::class_type, decltype(meta_test::global_lambda)>);
         static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(meta_test::global_lambda)>, decltype(meta_test::global_lambda)>);
+
+        static_assert(traits::is_member_function == false);
+        static_assert(infra::meta::callable_is_member_function_v<decltype(meta_test::global_lambda)> == false);
 
         static_assert(traits::arg_count == 0);
         static_assert(infra::meta::callable_arg_count_v<decltype(meta_test::global_lambda)> == 0);
@@ -325,6 +337,9 @@ void class_functor_test()
         static_assert(std::is_same_v<typename traits::class_type, meta_test::Cls>);
         static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::Cls::arg0)>, meta_test::Cls>);
 
+        static_assert(traits::is_member_function == true);
+        static_assert(infra::meta::callable_is_member_function_v<decltype(&meta_test::Cls::arg0)> == true);
+
         static_assert(traits::arg_count == 0);
         static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::Cls::arg0)> == 0);
     }
@@ -340,6 +355,9 @@ void class_functor_test()
 
         static_assert(std::is_same_v<typename traits::class_type, void>);
         static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::Cls::static_arg1)>, void>);
+
+        static_assert(traits::is_member_function == false);
+        static_assert(infra::meta::callable_is_member_function_v<decltype(&meta_test::Cls::static_arg1)> == false);
 
         static_assert(traits::arg_count == 1);
         static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::Cls::static_arg1)> == 1);
@@ -358,6 +376,9 @@ void class_functor_test()
         static_assert(std::is_same_v<typename traits::class_type, meta_test::Cls>);
         static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(fn)>, meta_test::Cls>);
 
+        static_assert(traits::is_member_function == false);
+        static_assert(infra::meta::callable_is_member_function_v<decltype(fn)> == false);
+
         static_assert(traits::arg_count == 1);
         static_assert(infra::meta::callable_arg_count_v<decltype(fn)> == 1);
     }
@@ -369,7 +390,8 @@ void encoding_test()
     const char8_t chinese[] = u8"你好世界";
     const char8_t emoji[] = u8"😊🚀";
 
-    auto test = [](const char8_t* utf8_src, size_t src_size) {
+    auto test = [](const char8_t* utf8_src, size_t src_size)
+    {
         // 1. 查询需要的 wchar_t 数量
         size_t wlen = infra::encoding::utf8_to_wide(utf8_src, src_size, nullptr, 0);
         std::wcout << L"需要 wchar_t 个数: " << wlen << std::endl;

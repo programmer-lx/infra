@@ -7,6 +7,13 @@ namespace infra::meta
 {
     namespace detail
     {
+        template<typename Fn>
+        static constexpr bool is_callable_object_v =
+            std::is_class_v<Fn> &&
+            !std::is_function_v<Fn> &&
+            !std::is_member_function_pointer_v<Fn> &&
+            requires { &Fn::operator(); };
+
         template<typename Class, typename Ret, typename... Args>
         struct callable_traits_base
         {
@@ -16,8 +23,9 @@ namespace infra::meta
             template<size_t Idx>
             using arg_type = std::tuple_element_t<Idx, args_tuple_type>;
 
-            using class_type = Class; // void代表不是成员函数(类静态函数，全局函数)，lambda表达式以及任何有的operator()的对象，都有class_type
+            using class_type = Class;
 
+            static constexpr bool is_member_function = !std::is_void_v<Class>;
             static constexpr size_t arg_count = std::tuple_size_v<args_tuple_type>;
         };
     }
@@ -25,9 +33,6 @@ namespace infra::meta
     // callable_traits
     template<typename Fn>
     struct callable_traits;
-
-    template<typename Fn>
-    struct callable_traits : callable_traits<decltype(&std::remove_reference_t<Fn>::operator())> {};
 
     // global function or class static function
     template<typename Ret, typename... Args>
@@ -41,6 +46,14 @@ namespace infra::meta
     template<typename Class, typename Ret, typename... Args>
     struct callable_traits<Ret(Class::*)(Args...) const> : detail::callable_traits_base<Class, Ret, Args...> {};
 
+    // lambda / functor 特化，不是member function
+    template<typename T>
+        requires requires { &std::remove_reference_t<T>::operator(); }
+    struct callable_traits<T> : callable_traits<decltype(&std::remove_reference_t<T>::operator())>
+    {
+        static constexpr bool is_member_function = false;
+    };
+
     template<typename Fn>
     using callable_return_t = typename callable_traits<Fn>::return_type;
 
@@ -52,6 +65,9 @@ namespace infra::meta
 
     template<typename Fn>
     using callable_class_t = typename callable_traits<Fn>::class_type;
+
+    template<typename Fn>
+    static constexpr bool callable_is_member_function_v = callable_traits<Fn>::is_member_function;
 
     template<typename Fn>
     static constexpr size_t callable_arg_count_v = callable_traits<Fn>::arg_count;

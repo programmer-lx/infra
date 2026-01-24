@@ -21,6 +21,7 @@ namespace infra::cpu
 {
     namespace detail
     {
+#if INFRA_ARCH_X86
         // 首先需要读取 EAX 1 寄存器，接下来才能用下面的枚举判断
         enum class CpuFeatureIndex_EAX1 : uint32_t
         {
@@ -68,6 +69,7 @@ namespace infra::cpu
             AVX_512_LOW_256     = 6 , // ZMM0-ZMM15
             AVX_512_HIGH_256    = 7 , // ZMM16-ZMM31
         };
+#endif
 
         template<typename IntLike>
         struct underlying

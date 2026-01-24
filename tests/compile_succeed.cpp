@@ -52,10 +52,6 @@
 #include <cpuid.h>
 #endif
 
-#if INFRA_COMPILER_CLANG || INFRA_COMPILER_GCC
-#include <cpuid.h>
-#endif
-
 
 INFRA_FORCE_INLINE int force_inline_test(int a, int b)
 {

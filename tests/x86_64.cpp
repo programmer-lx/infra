@@ -9,7 +9,7 @@
 
 int main()
 {
-    const infra::CpuInfo info = infra::cpu_info();
+    [[maybe_unused]] const infra::cpu::Info info = infra::cpu::info();
 
     // check intrinsics
     assert(info.FXSR && info.SSE && info.SSE2);

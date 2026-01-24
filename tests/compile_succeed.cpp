@@ -134,7 +134,7 @@ void debug_break_test()
 
 void aligned_malloc_test()
 {
-    void* mem = infra::aligned_malloc(1024, 64);
+    void* mem = infra::memory::aligned_malloc(1024, 64);
     if (mem != nullptr)
     {
         uintptr_t address = std::bit_cast<uintptr_t>(mem);
@@ -142,7 +142,7 @@ void aligned_malloc_test()
         {
             throw std::runtime_error("");
         }
-        infra::aligned_free(mem);
+        infra::memory::aligned_free(mem);
     }
     else
     {
@@ -167,7 +167,7 @@ void pause_test()
     int i = 100;
     while (i--)
     {
-        infra::cpu_pause();
+        infra::cpu::pause();
     }
 }
 
@@ -180,56 +180,226 @@ void endian_test()
 {
     {
         uint32_t a = 0x01020304;
-        infra::detail::reverse_bytes(&a, sizeof(uint32_t));
-        uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
+        infra::endian::detail::reverse_bytes(&a, sizeof(uint32_t));
+        [[maybe_unused]] uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
         assert(pa[0] == 0x01);
         assert(pa[1] == 0x02);
         assert(pa[2] == 0x03);
         assert(pa[3] == 0x04);
     }
 
-    if constexpr (infra::CurrentEndian == infra::Endian::Little)
+    if constexpr (infra::endian::Current == infra::endian::Endian::Little)
     {
         uint32_t a = 0x01020304;
-        uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
+        [[maybe_unused]] uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
         assert(pa[0] == 0x04);
         assert(pa[1] == 0x03);
         assert(pa[2] == 0x02);
         assert(pa[3] == 0x01);
 
-        infra::to_little_endian(&a, sizeof(a));
+        infra::endian::to_little(&a, sizeof(a));
         assert(a == 0x01020304);
 
-        infra::to_big_endian(&a, sizeof(a));
+        infra::endian::to_big(&a, sizeof(a));
         assert(a == 0x04030201);
     }
 
-    if constexpr (infra::CurrentEndian == infra::Endian::Big)
+    if constexpr (infra::endian::Current == infra::endian::Endian::Big)
     {
-        uint32_t a = 0x01020304;
-        uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
+        [[maybe_unused]] uint32_t a = 0x01020304;
+        [[maybe_unused]] uint8_t* pa = reinterpret_cast<uint8_t*>(&a);
         assert(pa[0] == 0x01);
         assert(pa[1] == 0x02);
         assert(pa[2] == 0x03);
         assert(pa[3] == 0x04);
 
-        infra::to_big_endian(&a, sizeof(a));
+        infra::endian::to_big(&a, sizeof(a));
         assert(a == 0x01020304);
 
-        infra::to_little_endian(&a, sizeof(a));
+        infra::endian::to_little(&a, sizeof(a));
         assert(a == 0x04030201);
     }
 
     // runtime check
-    infra::Endian endian = infra::runtime_check_endian();
-    if constexpr (infra::CurrentEndian == infra::Endian::Little)
+    [[maybe_unused]] infra::endian::Endian endian = infra::endian::runtime_check();
+    if constexpr (infra::endian::Current == infra::endian::Endian::Little)
     {
-        assert(endian == infra::Endian::Little);
+        assert(endian == infra::endian::Endian::Little);
     }
     else
     {
-        assert(endian == infra::Endian::Big);
+        assert(endian == infra::endian::Endian::Big);
     }
+}
+
+namespace meta_test
+{
+    void global_function_arg0() {}
+    void global_function_arg2(int, float) {}
+    double global_function_arg2_ret(int, float) { return 0.0; }
+
+    [[maybe_unused]] auto global_lambda = []() -> int { return 0; };
+
+    struct Cls
+    {
+        void arg0() {}
+        static double static_arg1(int) { return 0.0; }
+        char operator()(double) const { return '1'; }
+    };
+}
+
+void global_functor_test()
+{
+    {
+        using traits = infra::meta::callable_traits<decltype(&meta_test::global_function_arg0)>;
+
+        static_assert(std::is_same_v<typename traits::return_type, void>);
+        static_assert(std::is_same_v<infra::meta::callable_return_t<decltype(&meta_test::global_function_arg0)>, void>);
+
+        static_assert(std::is_same_v<typename traits::args_tuple_type, std::tuple<>>);
+        static_assert(std::is_same_v<infra::meta::callable_args_tuple_t<decltype(&meta_test::global_function_arg0)>, std::tuple<>>);
+
+        static_assert(std::is_same_v<typename traits::class_type, void>);
+        static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::global_function_arg0)>, void>);
+
+        static_assert(traits::arg_count == 0);
+        static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::global_function_arg0)> == 0);
+    }
+
+    {
+        using traits = infra::meta::callable_traits<decltype(&meta_test::global_function_arg2)>;
+
+        static_assert(std::is_same_v<typename traits::return_type, void>);
+        static_assert(std::is_same_v<infra::meta::callable_return_t<decltype(&meta_test::global_function_arg2)>, void>);
+
+        static_assert(std::is_same_v<typename traits::args_tuple_type, std::tuple<int, float>>);
+        static_assert(std::is_same_v<infra::meta::callable_args_tuple_t<decltype(&meta_test::global_function_arg2)>, std::tuple<int, float>>);
+
+        static_assert(std::is_same_v<typename traits::class_type, void>);
+        static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::global_function_arg2)>, void>);
+
+        static_assert(traits::arg_count == 2);
+        static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::global_function_arg2)> == 2);
+    }
+
+    {
+        using traits = infra::meta::callable_traits<decltype(&meta_test::global_function_arg2_ret)>;
+
+        static_assert(std::is_same_v<typename traits::return_type, double>);
+        static_assert(std::is_same_v<infra::meta::callable_return_t<decltype(&meta_test::global_function_arg2_ret)>, double>);
+
+        static_assert(std::is_same_v<typename traits::args_tuple_type, std::tuple<int, float>>);
+        static_assert(std::is_same_v<infra::meta::callable_args_tuple_t<decltype(&meta_test::global_function_arg2_ret)>, std::tuple<int, float>>);
+
+        static_assert(std::is_same_v<typename traits::class_type, void>);
+        static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::global_function_arg2_ret)>, void>);
+
+        static_assert(traits::arg_count == 2);
+        static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::global_function_arg2_ret)> == 2);
+    }
+
+    {
+        using traits = infra::meta::callable_traits<decltype(meta_test::global_lambda)>;
+
+        static_assert(std::is_same_v<typename traits::return_type, int>);
+        static_assert(std::is_same_v<infra::meta::callable_return_t<decltype(meta_test::global_lambda)>, int>);
+
+        static_assert(std::is_same_v<typename traits::args_tuple_type, std::tuple<>>);
+        static_assert(std::is_same_v<infra::meta::callable_args_tuple_t<decltype(meta_test::global_lambda)>, std::tuple<>>);
+
+        static_assert(std::is_same_v<typename traits::class_type, decltype(meta_test::global_lambda)>);
+        static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(meta_test::global_lambda)>, decltype(meta_test::global_lambda)>);
+
+        static_assert(traits::arg_count == 0);
+        static_assert(infra::meta::callable_arg_count_v<decltype(meta_test::global_lambda)> == 0);
+    }
+}
+
+void class_functor_test()
+{
+    {
+        using traits = infra::meta::callable_traits<decltype(&meta_test::Cls::arg0)>;
+
+        static_assert(std::is_same_v<typename traits::return_type, void>);
+        static_assert(std::is_same_v<infra::meta::callable_return_t<decltype(&meta_test::Cls::arg0)>, void>);
+
+        static_assert(std::is_same_v<typename traits::args_tuple_type, std::tuple<>>);
+        static_assert(std::is_same_v<infra::meta::callable_args_tuple_t<decltype(&meta_test::Cls::arg0)>, std::tuple<>>);
+
+        static_assert(std::is_same_v<typename traits::class_type, meta_test::Cls>);
+        static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::Cls::arg0)>, meta_test::Cls>);
+
+        static_assert(traits::arg_count == 0);
+        static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::Cls::arg0)> == 0);
+    }
+
+    {
+        using traits = infra::meta::callable_traits<decltype(&meta_test::Cls::static_arg1)>;
+
+        static_assert(std::is_same_v<typename traits::return_type, double>);
+        static_assert(std::is_same_v<infra::meta::callable_return_t<decltype(&meta_test::Cls::static_arg1)>, double>);
+
+        static_assert(std::is_same_v<typename traits::args_tuple_type, std::tuple<int>>);
+        static_assert(std::is_same_v<infra::meta::callable_args_tuple_t<decltype(&meta_test::Cls::static_arg1)>, std::tuple<int>>);
+
+        static_assert(std::is_same_v<typename traits::class_type, void>);
+        static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(&meta_test::Cls::static_arg1)>, void>);
+
+        static_assert(traits::arg_count == 1);
+        static_assert(infra::meta::callable_arg_count_v<decltype(&meta_test::Cls::static_arg1)> == 1);
+    }
+
+    {
+        [[maybe_unused]] meta_test::Cls fn;
+        using traits = infra::meta::callable_traits<decltype(fn)>;
+
+        static_assert(std::is_same_v<typename traits::return_type, char>);
+        static_assert(std::is_same_v<infra::meta::callable_return_t<decltype(fn)>, char>);
+
+        static_assert(std::is_same_v<typename traits::args_tuple_type, std::tuple<double>>);
+        static_assert(std::is_same_v<infra::meta::callable_args_tuple_t<decltype(fn)>, std::tuple<double>>);
+
+        static_assert(std::is_same_v<typename traits::class_type, meta_test::Cls>);
+        static_assert(std::is_same_v<infra::meta::callable_class_t<decltype(fn)>, meta_test::Cls>);
+
+        static_assert(traits::arg_count == 1);
+        static_assert(infra::meta::callable_arg_count_v<decltype(fn)> == 1);
+    }
+}
+
+void encoding_test()
+{
+    const char8_t ascii[] = u8"Hello";
+    const char8_t chinese[] = u8"你好世界";
+    const char8_t emoji[] = u8"😊🚀";
+
+    auto test = [](const char8_t* utf8_src, size_t src_size) {
+        // 1. 查询需要的 wchar_t 数量
+        size_t wlen = infra::encoding::utf8_to_wide(utf8_src, src_size, nullptr, 0);
+        std::wcout << L"需要 wchar_t 个数: " << wlen << std::endl;
+
+        // 2. 转换为 wchar_t
+        std::wstring wbuf(wlen, L'\0');
+        [[maybe_unused]] size_t wconverted = infra::encoding::utf8_to_wide(utf8_src, src_size, wbuf.data(), wbuf.size());
+        assert(wconverted == wlen);
+
+        // 3. 查询需要的 UTF-8 字节数
+        size_t u8len = infra::encoding::wide_to_utf8(wbuf.c_str(), wbuf.size(), nullptr, 0);
+        std::cout << "需要 UTF-8 字节数: " << u8len << std::endl;
+
+        // 4. 转回 UTF-8
+        std::u8string utf8_back(u8len, char8_t{});
+        [[maybe_unused]] size_t u8converted = infra::encoding::wide_to_utf8(wbuf.c_str(), wbuf.size(), utf8_back.data(), utf8_back.size());
+        assert(u8converted == u8len);
+
+        // 5. 验证是否一致
+        assert(u8len == src_size || memcmp(utf8_src, utf8_back.c_str(), src_size) == 0);
+        std::cout << "转换成功: " << reinterpret_cast<const char*>(utf8_back.c_str()) << std::endl << std::endl;
+    };
+
+    test(ascii, sizeof(ascii) - 1);
+    test(chinese, sizeof(chinese) - 1);
+    test(emoji, sizeof(emoji) - 1);
 }
 
 int main()
@@ -258,6 +428,11 @@ int main()
         restrict_test(nullptr);
 
         endian_test();
+
+        global_functor_test();
+        class_functor_test();
+
+        encoding_test();
     }
     catch (std::exception& e)
     {

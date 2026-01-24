@@ -17,7 +17,7 @@
     #include <emmintrin.h>
 #endif
 
-namespace infra
+namespace infra::cpu
 {
     namespace detail
     {
@@ -135,7 +135,7 @@ namespace infra
         AMD
     };
 
-    struct CpuInfo
+    struct Info
     {
         static constexpr unsigned Scalar = 1;
 
@@ -174,11 +174,11 @@ namespace infra
         // ------------------ arm features ------------------
         unsigned NEON       : 1 = 0;
     };
-    static_assert(std::is_standard_layout_v<CpuInfo> && std::is_trivially_copyable_v<CpuInfo>);
+    static_assert(std::is_standard_layout_v<Info> && std::is_trivially_copyable_v<Info>);
 
-    inline CpuInfo cpu_info() noexcept
+    inline Info info() noexcept
     {
-        CpuInfo result{};
+        Info result{};
 
 #if INFRA_ARCH_X86
         uint32_t abcd[4]; // eax, ebx, ecx, edx
@@ -296,11 +296,11 @@ namespace infra
 #endif
     }
 
-    inline void cpu_pause() noexcept
+    inline void pause() noexcept
     {
 #if INFRA_ARCH_X86
-        static const CpuInfo info = cpu_info();
-        if (info.SSE2)
+        static const Info cpu_info = info();
+        if (cpu_info.SSE2)
         {
             detail::cpu_pause_impl();
         }

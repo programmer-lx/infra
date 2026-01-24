@@ -5,7 +5,7 @@
 
 #include "os.hpp"
 
-namespace infra
+namespace infra::memory
 {
     inline void* aligned_malloc(size_t size, size_t alignment) noexcept
     {

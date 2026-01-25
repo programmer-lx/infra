@@ -110,6 +110,28 @@ namespace infra::meta
 
     #pragma endregion
 
+    #pragma region type logic 类型逻辑判断
+
+    template<typename T, typename... Ts>
+    struct any_type_of
+    {
+        static constexpr bool value = (std::is_same_v<T, Ts> || ...);
+    };
+
+    template<typename T, typename... Ts>
+    static constexpr bool any_type_of_v = any_type_of<T, Ts...>::value;
+
+    template<typename T, typename... Ts>
+    struct all_type_of
+    {
+        static constexpr bool value = (std::is_same_v<T, Ts> && ...);
+    };
+
+    template<typename T, typename... Ts>
+    static constexpr bool all_type_of_v = all_type_of<T, Ts...>::value;
+
+    #pragma endregion
+
     #pragma region type_list 类型列表
 
     template<typename... Ts>
@@ -227,6 +249,10 @@ namespace infra::meta
     };
 
     template<typename List, template<typename> typename TypeCondition>
+    using type_list_includes_cond_t = typename type_list_includes_cond<List, TypeCondition>::type;
+
+
+    template<typename List, template<typename> typename TypeCondition>
     struct type_list_excludes_cond;
 
     template<typename... Ts, template<typename> typename TypeCondition>
@@ -237,38 +263,56 @@ namespace infra::meta
         >;
     };
 
+    template<typename List, template<typename> typename TypeCondition>
+    using type_list_excludes_cond_t = typename type_list_excludes_cond<List, TypeCondition>::type;
+
 
     namespace detail
     {
-        template<typename List, typename ExcludeType>
-        struct type_list_exclude_one_type;
+        template<typename T, typename List, template<typename, typename> typename Compare>
+        struct type_list_insertion_sort;
 
-        template<typename... Ts, typename ExcludeType>
-        struct type_list_exclude_one_type<type_list<Ts...>, ExcludeType>
+        template<typename T, template<typename,typename> typename Compare>
+        struct type_list_insertion_sort<T, type_list<>, Compare>
         {
-            using type = type_list_concat_t<
-                std::conditional_t<!std::is_same_v<ExcludeType, Ts>, type_list<Ts>, type_list<>>...
+            using type = type_list<T>;
+        };
+
+        template<typename T, typename Head, typename... Tail, template<typename, typename> typename Compare>
+        struct type_list_insertion_sort<T, type_list<Head, Tail...>, Compare>
+        {
+            using type = std::conditional_t<
+                Compare<T, Head>::value,
+                type_list<T, Head, Tail...>,
+                type_list_concat_t<
+                    type_list<Head>,
+                    typename type_list_insertion_sort<T, type_list<Tail...>, Compare>::type
+                >
             >;
         };
     }
 
-    template<typename List, typename... ExcludeTypes>
-    struct type_list_exclude_types;
+    template<typename List, template<typename, typename> typename Compare>
+    struct type_list_sort;
 
-    template<typename List>
-    struct type_list_exclude_types<List>
+    template<template<typename, typename> typename Compare>
+    struct type_list_sort<type_list<>, Compare>
     {
-        using type = List;
+        using type = type_list<>;
     };
 
-    template<typename List, typename FirstExclude, typename... RestExcludes>
-    struct type_list_exclude_types<List, FirstExclude, RestExcludes...>
+    template<typename First, typename... Rest, template<typename, typename> typename Compare>
+    struct type_list_sort<type_list<First, Rest...>, Compare>
     {
-        using type = typename type_list_exclude_types<
-            typename detail::type_list_exclude_one_type<List, FirstExclude>::type,
-            RestExcludes...
-        >::type;
+    private:
+        using sorted_rest = typename type_list_sort<type_list<Rest...>, Compare>::type;
+
+    public:
+        using type = typename detail::type_list_insertion_sort<First, sorted_rest, Compare>::type;
     };
+
+    template<typename List, template<typename, typename> typename Compare>
+    using type_list_sort_t = type_list_sort<List, Compare>::type;
 
     #pragma endregion
 }

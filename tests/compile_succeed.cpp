@@ -406,9 +406,15 @@ void is_specialization_of_test()
 }
 
 template<typename T>
-struct is_not_integral
+struct is_int
 {
-    static constexpr bool value = !std::is_integral_v<T>;
+    static constexpr bool value = std::is_same_v<T, int>;
+};
+
+template<typename A, typename B>
+struct type_pred_less
+{
+    static constexpr bool value = sizeof(A) < sizeof(B);
 };
 
 void type_list_test()
@@ -449,25 +455,56 @@ void type_list_test()
     }
 
     {
-        // extract conditionally
-        using l1 = infra::meta::type_list<int, float, int, double>;
-        using l2 = typename infra::meta::type_list_includes_cond<l1, std::is_integral>::type;
+        // include conditionally
+        using l1 = infra::meta::type_list<int, float, int, double, bool>;
+
+        using l2 = typename infra::meta::type_list_includes_cond<l1, is_int>::type;
         static_assert(std::is_same_v<l2, infra::meta::type_list<int, int>>);
-
-        using l3 = infra::meta::type_list_excludes_cond<l1, std::is_integral>::type;
-        static_assert(std::is_same_v<l3, infra::meta::type_list<float, double>>);
     }
-
     {
-        // exclude
+        // exclude conditionally
         using l1 = infra::meta::type_list<int, float, int, double>;
-        using l2 = typename infra::meta::type_list_exclude_types<l1, int>::type;
+
+        using l2 = infra::meta::type_list_excludes_cond<l1, std::is_integral>::type;
         static_assert(std::is_same_v<l2, infra::meta::type_list<float, double>>);
     }
+
+    // sort
     {
-        using l1 = infra::meta::type_list<int, float, bool, float, int, double>;
-        using l2 = typename infra::meta::type_list_exclude_types<l1, int, bool>::type;
-        static_assert(std::is_same_v<l2, infra::meta::type_list<float, float, double>>);
+        using l1 = infra::meta::type_list<uint64_t, uint32_t, uint8_t>;
+
+        using l2 = typename infra::meta::type_list_sort<l1, type_pred_less>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<uint8_t, uint32_t, uint64_t>>);
+    }
+    {
+        using l1 = infra::meta::type_list<uint8_t, uint32_t, uint8_t>;
+
+        using l2 = typename infra::meta::type_list_sort<l1, type_pred_less>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<uint8_t, uint8_t, uint32_t>>);
+    }
+    {
+        using l1 = infra::meta::type_list<uint8_t, uint8_t>;
+
+        using l2 = typename infra::meta::type_list_sort<l1, type_pred_less>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<uint8_t, uint8_t>>);
+
+        using l3 = infra::meta::type_list_sort_t<l1, type_pred_less>;
+        static_assert(std::is_same_v<l3, infra::meta::type_list<uint8_t, uint8_t>>);
+    }
+    {
+        using l1 = infra::meta::type_list<uint8_t>;
+
+        using l2 = typename infra::meta::type_list_sort<l1, type_pred_less>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<uint8_t>>);
+    }
+    {
+        using l1 = infra::meta::type_list<>;
+
+        using l2 = typename infra::meta::type_list_sort<l1, type_pred_less>::type;
+        static_assert(std::is_same_v<l2, infra::meta::type_list<>>);
+
+        using l3 = infra::meta::type_list_sort_t<l1, type_pred_less>;
+        static_assert(std::is_same_v<l3, infra::meta::type_list<>>);
     }
 }
 

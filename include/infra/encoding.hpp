@@ -2,29 +2,6 @@
 
 #include <cwchar> // wchar_t
 #include <cstddef> // size_t
-
-#pragma region HPP
-
-namespace infra::encoding
-{
-    size_t utf8_to_wide(
-        const char8_t* src, size_t src_byte_size,
-              wchar_t* dst, size_t dst_char_size
-    ) noexcept;
-
-    size_t wide_to_utf8(
-        const wchar_t* src, size_t src_char_size,
-              char8_t* dst, size_t dst_byte_size
-    ) noexcept;
-}
-
-#pragma endregion HPP
-
-
-
-#pragma region CPP
-#ifdef INFRA_ENCODING_IMPL
-
 #include <cstdint>
 #include <type_traits>
 
@@ -38,7 +15,7 @@ namespace infra::encoding
         }
     }
 
-    size_t utf8_to_wide(
+    inline size_t utf8_to_wide(
         const char8_t* src, size_t src_byte_size,
               wchar_t* dst, size_t dst_char_size
     ) noexcept
@@ -106,7 +83,7 @@ namespace infra::encoding
         return needed;
     }
 
-    size_t wide_to_utf8(
+    inline size_t wide_to_utf8(
         const wchar_t* src, size_t src_char_size,
               char8_t* dst, size_t dst_byte_size
     ) noexcept
@@ -165,6 +142,3 @@ namespace infra::encoding
         return needed;
     }
 }
-
-#endif // INFRA_ENCODING_IMPL
-#pragma endregion CPP

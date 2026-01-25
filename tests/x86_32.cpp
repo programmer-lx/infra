@@ -1,7 +1,7 @@
 #include <infra/arch.hpp>
 
 #define INFRA_CPU_IMPL
-#include <infra/cpu.hpp>
+#include <infra/cpu.cpp.hpp>
 
 #if INFRA_ARCH_X86_32
 #include <mmintrin.h>

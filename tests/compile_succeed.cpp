@@ -12,15 +12,16 @@
 #include <infra/compiler.hpp>
 
 #define INFRA_CPU_IMPL
-#include <infra/cpu.hpp>
+#include <infra/cpu.cpp.hpp>
 
-#define INFRA_ENCODING_IMPL
 #include <infra/encoding.hpp>
 
 #include <infra/endian.hpp>
 #include <infra/memory.hpp>
 #include <infra/meta.hpp>
-#include <infra/os.hpp>
+
+#define INFRA_OS_IMPL
+#include <infra/os.cpp.hpp>
 
 // os
 #if INFRA_OS_WINDOWS
@@ -175,12 +176,30 @@ void assert_test()
     // INFRA_ASSERT_WITH_MSG(a != 1, "message");
 }
 
-void pause_test()
+void cpu_test()
 {
     int i = 100;
     while (i--)
     {
         infra::cpu::pause();
+    }
+}
+
+void os_test()
+{
+    [[maybe_unused]] infra::os::ProcessorInfo processor_info = infra::os::processor_info();
+    [[maybe_unused]] auto mem_info = infra::os::memory_info();
+
+    size_t disk_count = infra::os::disk_infos(nullptr, 0);
+    std::vector<infra::os::DiskInfo> disk_infos(disk_count);
+    infra::os::disk_infos(disk_infos.data(), disk_infos.size());
+
+    {
+        // environment
+        size_t env_size = infra::os::get_env_value(u8"PATH", 4, nullptr, 0);
+        std::u8string env_str(env_size + 1, u8'\0');
+        infra::os::get_env_value(u8"PATH", 4, env_str.data(), env_str.size());
+        std::cout << reinterpret_cast<const char*>(env_str.c_str()) << std::endl;
     }
 }
 
@@ -582,7 +601,8 @@ int main()
         unreachable_test();
         assert_test();
 
-        pause_test();
+        cpu_test();
+        os_test();
         restrict_test(nullptr);
 
         endian_test();

@@ -3,7 +3,7 @@
 #include <infra/arch.hpp>
 
 #define INFRA_CPU_IMPL
-#include <infra/cpu.hpp>
+#include <infra/cpu.cpp.hpp>
 
 #if INFRA_ARCH_X86_64
 
@@ -11,7 +11,7 @@
 
 int main()
 {
-    [[maybe_unused]] const infra::cpu::Info& info = infra::cpu::info();
+    [[maybe_unused]] infra::cpu::Info info = infra::cpu::info();
 
     // check intrinsics
     assert(info.fxsr && info.sse && info.sse2);

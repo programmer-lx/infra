@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstddef>
 
-#include "os.hpp"
+#include "infra/detail/os_detect.hpp"
 
 namespace infra::memory
 {

@@ -10,8 +10,13 @@
 #include <infra/assert.hpp>
 #include <infra/attributes.hpp>
 #include <infra/compiler.hpp>
+
+#define INFRA_CPU_IMPL
 #include <infra/cpu.hpp>
+
+#define INFRA_ENCODING_IMPL
 #include <infra/encoding.hpp>
+
 #include <infra/endian.hpp>
 #include <infra/memory.hpp>
 #include <infra/meta.hpp>
@@ -131,19 +136,30 @@ void debug_break_test()
 
 void aligned_malloc_test()
 {
-    void* mem = infra::memory::aligned_malloc(1024, 64);
-    if (mem != nullptr)
     {
-        uintptr_t address = std::bit_cast<uintptr_t>(mem);
-        if (address % 64 != 0)
+        void* mem = infra::memory::aligned_malloc(1024, 64);
+        if (mem != nullptr)
+        {
+            uintptr_t address = std::bit_cast<uintptr_t>(mem);
+            if (address % 64 != 0)
+            {
+                throw std::runtime_error("");
+            }
+            infra::memory::aligned_free(mem);
+        }
+        else
         {
             throw std::runtime_error("");
         }
-        infra::memory::aligned_free(mem);
     }
-    else
+
+    // std::vector use aligned_allocator
     {
-        throw std::runtime_error("");
+        std::vector<float, infra::memory::AlignedAllocator<float, 256>> v(123);
+        for (int i = 0; i < 123; ++i)
+        {
+            assert(reinterpret_cast<uintptr_t>(&v[i]) % 256 == 0);
+        }
     }
 }
 

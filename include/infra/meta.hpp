@@ -113,22 +113,22 @@ namespace infra::meta
     #pragma region type logic 类型逻辑判断
 
     template<typename T, typename... Ts>
-    struct any_type_of
+    struct is_any_type_of
     {
         static constexpr bool value = (std::is_same_v<T, Ts> || ...);
     };
 
     template<typename T, typename... Ts>
-    static constexpr bool any_type_of_v = any_type_of<T, Ts...>::value;
+    static constexpr bool is_any_type_of_v = is_any_type_of<T, Ts...>::value;
 
     template<typename T, typename... Ts>
-    struct all_type_of
+    struct is_all_type_of
     {
         static constexpr bool value = (std::is_same_v<T, Ts> && ...);
     };
 
     template<typename T, typename... Ts>
-    static constexpr bool all_type_of_v = all_type_of<T, Ts...>::value;
+    static constexpr bool is_all_type_of_v = is_all_type_of<T, Ts...>::value;
 
     #pragma endregion
 

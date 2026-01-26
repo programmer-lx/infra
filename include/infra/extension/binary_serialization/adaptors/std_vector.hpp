@@ -6,7 +6,7 @@
 
 namespace infra::binary_serialization
 {
-    template<detail::is_1byte ByteType, typename Allocator>
+    template<is_1byte ByteType, typename Allocator>
     struct Adaptor<std::vector<ByteType, Allocator>>
     {
         using byte_type = ByteType;

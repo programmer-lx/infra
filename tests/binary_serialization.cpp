@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstddef>
+#include <cstdlib>
 
 #include <iostream>
 #include <array>
@@ -128,12 +129,12 @@ namespace infra::binary_serialization
 
 struct Storage_CharArr
 {
-    char a[4]; // 4B
+    // char a[4]; // 4B
     char8_t b[4]; // 4B
     char16_t c[2]; // 4B
     char32_t d[3]; // 12B
-    wchar_t e[2]; // ?B
-    // total no padding = 24B + sizeof(wchar_t) * 2
+    // wchar_t e[2]; // ?B
+    // total no padding = 20B
 };
 
 namespace infra::binary_serialization
@@ -144,11 +145,11 @@ namespace infra::binary_serialization
         Storage_CharArr& storage
     )
     {
-        reader.c_array(storage.a);
+        // reader.c_array(storage.a);
         reader.c_array(storage.b);
         reader.c_array(storage.c);
         reader.c_array(storage.d);
-        reader.c_array(storage.e);
+        // reader.c_array(storage.e);
     }
 
     template<typename ByteContainer>
@@ -157,18 +158,18 @@ namespace infra::binary_serialization
         const Storage_CharArr& storage
     )
     {
-        writer.c_array(storage.a);
+        // writer.c_array(storage.a);
         writer.c_array(storage.b);
         writer.c_array(storage.c);
         writer.c_array(storage.d);
-        writer.c_array(storage.e);
+        // writer.c_array(storage.e);
     }
 }
 
 
 struct Storage_CArr
 {
-    char a[2][3];
+    // char a[2][3];
     char16_t b[4][2];
     int64_t c;
     int32_t d[2][2][3];
@@ -182,7 +183,7 @@ namespace infra::binary_serialization
         Storage_CArr& storage
     )
     {
-        reader.c_array(storage.a);
+        // reader.c_array(storage.a);
         reader.c_array(storage.b);
         reader.value(storage.c);
         reader.c_array(storage.d);
@@ -194,7 +195,7 @@ namespace infra::binary_serialization
         const Storage_CArr& storage
     )
     {
-        writer.c_array(storage.a);
+        // writer.c_array(storage.a);
         writer.c_array(storage.b);
         writer.value(storage.c);
         writer.c_array(storage.d);
@@ -259,7 +260,7 @@ namespace infra::binary_serialization
 void checksum_test()
 {
     const char* s = "123456789";
-    [[maybe_unused]] auto checksum = infra::binary_serialization::detail::update_checksum(
+    [[maybe_unused]] auto checksum = infra::binary_serialization::update_checksum(
         infra::binary_serialization::InitialChecksum, reinterpret_cast<const uint8_t*>(s), 9);
     ASSERT(checksum == 0xCBF43926);
 }
@@ -268,24 +269,24 @@ void traits_test()
 {
     using namespace infra::binary_serialization;
 
-    static_assert(detail::is_value<int>);
-    static_assert(detail::is_value<float>);
-    static_assert(detail::is_value<char>);
-    static_assert(detail::is_value<char8_t>);
-    static_assert(detail::is_value<wchar_t>);
-    static_assert(detail::is_c_array<int[3]>);
-    static_assert(detail::is_c_array<char[4]>);
-    static_assert(detail::is_c_array<double[5]>);
-    static_assert(detail::is_c_array<int[3][4]>);
+    static_assert(is_value<int>);
+    static_assert(is_value<const float&>);
+    static_assert(!is_value<char>);
+    static_assert(is_value<char8_t>);
+    static_assert(!is_value<wchar_t>);
+    static_assert(is_c_array<int[3]>);
+    static_assert(!is_c_array<char[4]>);
+    static_assert(is_c_array<double[5]>);
+    static_assert(is_c_array<int[3][4]>);
 
-    static_assert(detail::is_structure<Storage>);
-    static_assert(!detail::is_structure<int>);
+    static_assert(is_structure<Storage>);
+    static_assert(!is_structure<int>);
 
     static_assert(sizeof(int[3][4])== sizeof(int) * 12);
 
     // 指针不行
-    static_assert(!detail::is_value<int*>);
-    static_assert(!detail::is_value<char*>);
+    static_assert(!is_value<int*>);
+    static_assert(!is_value<char*>);
 }
 
 void fixed_byte_array_test()
@@ -306,9 +307,9 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = detail::update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = detail::update_checksum(checksum, &buffer[detail::DataOffset], 16);
-        checksum = detail::update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
+        checksum_t checksum = update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
+        checksum = update_checksum(checksum, &buffer[detail::DataOffset], 16);
+        checksum = update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
         ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
@@ -365,9 +366,9 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = detail::update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = detail::update_checksum(checksum, &buffer[detail::DataOffset], 8);
-        checksum = detail::update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
+        checksum_t checksum = update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
+        checksum = update_checksum(checksum, &buffer[detail::DataOffset], 8);
+        checksum = update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
         ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
@@ -429,17 +430,17 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = detail::update_checksum(
+        checksum_t checksum = update_checksum(
             InitialChecksum,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataOffset],
             30 // data size
         );
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
@@ -540,18 +541,18 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // ---- checksum ----
-        checksum_t checksum = detail::update_checksum(
+        checksum_t checksum = update_checksum(
             InitialChecksum,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
         // truncated buffer
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataOffset],
             16+8+4
         );
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
@@ -647,9 +648,9 @@ void dyn_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = detail::update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = detail::update_checksum(checksum, &buffer[detail::DataOffset], 16);
-        checksum = detail::update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
+        checksum_t checksum = update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
+        checksum = update_checksum(checksum, &buffer[detail::DataOffset], 16);
+        checksum = update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
         ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
@@ -711,17 +712,17 @@ void dyn_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = detail::update_checksum(
+        checksum_t checksum = update_checksum(
             InitialChecksum,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataOffset],
             30 // data size
         );
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
@@ -808,11 +809,11 @@ void char_arr_test()
     
     {
         Storage_CharArr storage{
-            {'A','B','C','D'},               // char a[4]
+            // {'A','B','C','D'},               // char a[4]
             {u8'e', u8'f', u8'g', u8'h'},    // char8_t b[4]
             {u'你', u'好'},                   // char16_t c[2]
-            {U'𠮷', U'🐱', U'😊'},           // char32_t d[3]
-            {312, 257}                       // wchar_t e[2]
+            {U'𠮷', U'🐱', U'😊'}           // char32_t d[3]
+            // {312, 257}                       // wchar_t e[2]
         };
 
         std::vector<uint8_t> buffer{};
@@ -827,20 +828,20 @@ void char_arr_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // ---- checksum ----
-        checksum_t checksum = detail::update_checksum(
+        checksum_t checksum = update_checksum(
             InitialChecksum,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
 
         // data size
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataOffset],
-            24 + sizeof(wchar_t) * 2
+            20
         );
 
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
@@ -849,7 +850,7 @@ void char_arr_test()
         ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // ---- data length ----
-        ASSERT(buffer[detail::DataLengthOffset + 0] == 24 + sizeof(wchar_t) * 2); // no padding
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 20); // no padding
         ASSERT(buffer[detail::DataLengthOffset + 1] == 0x00);
         ASSERT(buffer[detail::DataLengthOffset + 2] == 0x00);
         ASSERT(buffer[detail::DataLengthOffset + 3] == 0x00);
@@ -857,35 +858,35 @@ void char_arr_test()
         size_t off = detail::DataOffset;
 
         // ---- char a[4] ----
-        ASSERT(buffer[off + 0] == 'A');
-        ASSERT(buffer[off + 1] == 'B');
-        ASSERT(buffer[off + 2] == 'C');
-        ASSERT(buffer[off + 3] == 'D');
+        // ASSERT(buffer[off + 0] == 'A');
+        // ASSERT(buffer[off + 1] == 'B');
+        // ASSERT(buffer[off + 2] == 'C');
+        // ASSERT(buffer[off + 3] == 'D');
 
         // ---- char8_t b[4] ----
-        ASSERT(buffer[off + 4] == u8'e');
-        ASSERT(buffer[off + 5] == u8'f');
-        ASSERT(buffer[off + 6] == u8'g');
-        ASSERT(buffer[off + 7] == u8'h');
+        ASSERT(buffer[off + 0] == u8'e');
+        ASSERT(buffer[off + 1] == u8'f');
+        ASSERT(buffer[off + 2] == u8'g');
+        ASSERT(buffer[off + 3] == u8'h');
 
         // ---- char16_t c[2] ----
-        [[maybe_unused]] uint16_t* c_ptr = reinterpret_cast<uint16_t*>(&buffer[off + 8]);
+        [[maybe_unused]] uint16_t* c_ptr = reinterpret_cast<uint16_t*>(&buffer[off + 4]);
         ASSERT(c_ptr[0] == u'你');
         ASSERT(c_ptr[1] == u'好');
 
         // ---- char32_t d[3] ----
-        [[maybe_unused]] uint32_t* d_ptr = reinterpret_cast<uint32_t*>(&buffer[off + 12]);
+        [[maybe_unused]] uint32_t* d_ptr = reinterpret_cast<uint32_t*>(&buffer[off + 8]);
         ASSERT(d_ptr[0] == U'𠮷');
         ASSERT(d_ptr[1] == U'🐱');
         ASSERT(d_ptr[2] == U'😊');
 
         // wchar_t e[2]
-        [[maybe_unused]] wchar_t* e_ptr = reinterpret_cast<wchar_t*>(&buffer[off + 24]);
-        ASSERT(e_ptr[0] == 312);
-        ASSERT(e_ptr[1] == 257);
+        // [[maybe_unused]] wchar_t* e_ptr = reinterpret_cast<wchar_t*>(&buffer[off + 24]);
+        // ASSERT(e_ptr[0] == 312);
+        // ASSERT(e_ptr[1] == 257);
 
         // ---- size sanity check ----
-        ASSERT(buffer.size() >= detail::DataOffset + 24 + sizeof(wchar_t));
+        ASSERT(buffer.size() >= detail::DataOffset + 20);
 
         // ---- deserialize test ----
         Storage_CharArr back{};
@@ -895,10 +896,10 @@ void char_arr_test()
         ASSERT(result.error == Error::OK);
 
         // ---- validate deserialized data ----
-        ASSERT(back.a[0] == 'A');
-        ASSERT(back.a[1] == 'B');
-        ASSERT(back.a[2] == 'C');
-        ASSERT(back.a[3] == 'D');
+        // ASSERT(back.a[0] == 'A');
+        // ASSERT(back.a[1] == 'B');
+        // ASSERT(back.a[2] == 'C');
+        // ASSERT(back.a[3] == 'D');
 
         ASSERT(back.b[0] == u8'e');
         ASSERT(back.b[1] == u8'f');
@@ -912,8 +913,8 @@ void char_arr_test()
         ASSERT(back.d[1] == U'🐱');
         ASSERT(back.d[2] == U'😊');
 
-        ASSERT(back.e[0] == 312);
-        ASSERT(back.e[1] == 257);
+        // ASSERT(back.e[0] == 312);
+        // ASSERT(back.e[1] == 257);
     }
 }
 
@@ -923,7 +924,7 @@ void c_arr_test()
 
     {
         Storage_CArr storage{
-            { {'A','B','C'}, {'D','E','F'} },          // char a[2][3]
+            // { {'A','B','C'}, {'D','E','F'} },          // char a[2][3]
             { {u'你', u'好'}, {u'世', u'界'}, {u'测', u'试'}, {u'啊', u'！'} }, // char16_t b[4][2]
             0x1122334455667788LL,                      // int64_t c
             { {{1,2,3}, {4,5,6}}, {{7,8,9}, {10,11,12}} } // int32_t d[2][2][3]
@@ -941,20 +942,20 @@ void c_arr_test()
         ASSERT(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 3]) == detail::MagicValue[3]);
 
         // ---- checksum ----
-        checksum_t checksum = detail::update_checksum(
+        checksum_t checksum = update_checksum(
             InitialChecksum,
             std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset]),
             detail::MagicSize
         );
 
         // data size (no padding)
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             std::bit_cast<uint8_t*>(&buffer[detail::DataOffset]),
-            sizeof(storage.a) + sizeof(storage.b) + sizeof(storage.c) + sizeof(storage.d)
+            sizeof(storage.b) + sizeof(storage.c) + sizeof(storage.d)
         );
 
-        checksum = detail::update_checksum(
+        checksum = update_checksum(
             checksum,
             std::bit_cast<uint8_t*>(&buffer[detail::DataLengthOffset]),
             detail::DataLengthSize
@@ -971,12 +972,12 @@ void c_arr_test()
         // ---- validate deserialized data ----
 
         // char a[2][3]
-        ASSERT(back.a[0][0] == 'A');
-        ASSERT(back.a[0][1] == 'B');
-        ASSERT(back.a[0][2] == 'C');
-        ASSERT(back.a[1][0] == 'D');
-        ASSERT(back.a[1][1] == 'E');
-        ASSERT(back.a[1][2] == 'F');
+        // ASSERT(back.a[0][0] == 'A');
+        // ASSERT(back.a[0][1] == 'B');
+        // ASSERT(back.a[0][2] == 'C');
+        // ASSERT(back.a[1][0] == 'D');
+        // ASSERT(back.a[1][1] == 'E');
+        // ASSERT(back.a[1][2] == 'F');
 
         // char16_t b[4][2]
         ASSERT(back.b[0][0] == u'你');
@@ -1026,12 +1027,17 @@ void error_test()
         buffer[detail::MagicOffset + 1] ^= 0xFF;
 
         // 反序列化
-        Storage back = { 1000, 1000, 1000 };
+        Storage back = { 1000, 1001, 1002 };
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         ASSERT(!result);
         ASSERT(result.error == Error::MagicNumberIncorrect); // 可以具体判断 checksum 错误
+
+        // back没有发生改变
+        ASSERT(back.a == 1000);
+        ASSERT(back.b == 1001);
+        ASSERT(back.c == 1002);
     }
 
     // data length error
@@ -1046,12 +1052,16 @@ void error_test()
         buffer[detail::DataLengthOffset] -= 1;
 
         // 反序列化
-        Storage back = { 1000, 1000, 1000 };
+        Storage back = { 1000, 1001, 1002 };
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         ASSERT(!result);
         ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+
+        ASSERT(back.a == 1000);
+        ASSERT(back.b == 1001);
+        ASSERT(back.c == 1002);
     }
 
     // checksum error
@@ -1066,12 +1076,16 @@ void error_test()
         buffer[detail::ChecksumOffset + 1] ^= 0xFF;
 
         // 反序列化
-        Storage back = { 1000, 1000, 1000 };
+        Storage back = { 1000, 1001, 1002 };
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         ASSERT(!result);
         ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+
+        ASSERT(back.a == 1000);
+        ASSERT(back.b == 1001);
+        ASSERT(back.c == 1002);
     }
 
     // data error
@@ -1086,12 +1100,16 @@ void error_test()
         buffer[detail::DataOffset + 5] ^= 0xFF;  // 反转第 6 个字节
 
         // 反序列化
-        Storage back = { 1000, 1000, 1000 };
+        Storage back = { 1000, 1001, 1002 };
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         ASSERT(!result);
         ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+
+        ASSERT(back.a == 1000);
+        ASSERT(back.b == 1001);
+        ASSERT(back.c == 1002);
     }
 }
 
@@ -1172,6 +1190,8 @@ void custom_structure_test()
             auto back_it = back.map_1.find(key);
             ASSERT(back_it != back.map_1.end());
 
+            ASSERT(back_it->first == key);
+
             ASSERT(back_it->second.a == value.a);
             ASSERT(back_it->second.b == value.b);
             ASSERT(back_it->second.c == value.c);
@@ -1201,7 +1221,8 @@ int main()
     catch (std::exception& e)
     {
         std::cerr << e.what() << std::endl;
+        return EXIT_FAILURE;
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }

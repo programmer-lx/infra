@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <bit>
 
+#include "meta.hpp"
 #include "assert.hpp"
 #include "attributes.hpp"
 #include "endian.hpp"
@@ -50,59 +51,10 @@ namespace infra::binary_serialization
         static constexpr size_t DataOffset = sizeof(Header);
         static_assert(DataOffset == 12);
 
-        template <typename T>
-        concept is_1byte = requires
-        {
-            requires sizeof(T) == 1;
-            requires std::is_trivially_copyable_v<T>; // can memcpy
-        };
-
         template<typename T>
         concept has_resize = requires(T& t)
         {
             t.resize(1, static_cast<T::value_type>(0));
-        };
-
-        template<typename T>
-        concept is_char_t = requires
-        {
-            requires    std::is_same_v<T, char>     ||
-                        std::is_same_v<T, char8_t>  ||
-                        std::is_same_v<T, char16_t> ||
-                        std::is_same_v<T, char32_t> ||
-                        std::is_same_v<T, wchar_t>;
-        };
-
-        // 所有基础类型
-        template<typename T>
-        concept is_value = requires
-        {
-            requires std::is_arithmetic_v<T> || std::is_enum_v<T> || is_char_t<T>;
-            requires !std::is_pointer_v<T>;
-            requires std::is_trivial_v<T>;
-            requires !std::is_class_v<T>;
-        };
-
-        template<typename T>
-        struct is_c_arr_impl : std::false_type {};
-
-        template<typename T, std::size_t N>
-        struct is_c_arr_impl<T[N]>
-        {
-            static constexpr bool value = is_c_arr_impl<T>::value || is_value<T>;
-        };
-
-        // N维C数组
-        template<typename T>
-        concept is_c_array = requires
-        {
-            requires is_c_arr_impl<T>::value;
-        };
-
-        template<typename T>
-        concept is_structure = requires
-        {
-            requires std::is_class_v<T>;
         };
 
         constexpr checksum_t CRC32_POLY = 0xEDB88320;
@@ -127,21 +79,80 @@ namespace infra::binary_serialization
         }
 
         constexpr auto crc32_table = make_crc32_table();
-
-        template<detail::is_1byte B>
-        checksum_t update_checksum(checksum_t origin, const B* data, size_t size) noexcept
-        {
-            origin = origin ^ 0xffffffff;
-
-            for (size_t i = 0; i < size; i++)
-            {
-                uint8_t index = (origin ^ std::bit_cast<uint8_t>(data[i])) & 0xff;
-                origin = (origin >> 8) ^ crc32_table[index];
-            }
-
-            return origin ^ 0xffffffff;
-        }
     }
+    
+    template <typename T>
+    concept is_1byte = requires
+    {
+        requires sizeof(T) == 1;
+        requires std::is_trivially_copyable_v<T>; // can memcpy
+    };
+    
+    template<is_1byte B>
+    checksum_t update_checksum(checksum_t origin, const B* data, size_t size) noexcept
+    {
+        origin = origin ^ 0xffffffff;
+
+        for (size_t i = 0; i < size; i++)
+        {
+            uint8_t index = (origin ^ std::bit_cast<uint8_t>(data[i])) & 0xff;
+            origin = (origin >> 8) ^ detail::crc32_table[index];
+        }
+
+        return origin ^ 0xffffffff;
+    }
+    
+    template<typename T>
+    concept serializable_integral_value =
+        meta::is_any_type_of_v<std::remove_cvref_t<T>,
+            uint8_t , int8_t ,
+            uint16_t, int16_t,
+            uint32_t, int32_t,
+            uint64_t, int64_t
+        >;
+        
+    template<typename T>
+    concept serializable_floating_point_value =
+        (std::is_same_v<std::remove_cvref_t<T>, float> && std::numeric_limits<float>::is_iec559) ||
+        (std::is_same_v<std::remove_cvref_t<T>, double> && std::numeric_limits<double>::is_iec559);
+            
+    template<typename T>
+    concept is_serializable_scalar_value = serializable_integral_value<T> || serializable_floating_point_value<T>;
+
+    template<typename T>
+    concept is_serializable_char_value =
+        std::is_same_v<T, char8_t> || std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>;
+
+    template<typename T>
+    concept is_serializable_enum_value =
+        std::is_enum_v<T> &&
+        is_serializable_scalar_value<std::underlying_type_t<T>>;
+    
+    // 所有基础类型
+    template<typename T>
+    concept is_value =
+        is_serializable_scalar_value<T>    ||
+        is_serializable_char_value<T>      ||
+        is_serializable_enum_value<T>;
+    
+    namespace detail
+    {
+        template<typename T>
+        struct is_c_arr_impl : std::false_type {};
+
+        template<typename T, std::size_t N>
+        struct is_c_arr_impl<T[N]>
+        {
+            static constexpr bool value = is_c_arr_impl<T>::value || is_value<T>;
+        };
+    }
+    
+    // N维C数组
+    template<typename T>
+    concept is_c_array = detail::is_c_arr_impl<T>::value;
+
+    template<typename T>
+    concept is_structure = std::is_class_v<T>;
 
     template<typename ByteContainer>
     class Writer;
@@ -175,12 +186,6 @@ namespace infra::binary_serialization
         ByteContainer& m_arr;
         size_t m_pos;
         checksum_t m_checksum = InitialChecksum;
-
-        template<detail::is_1byte B>
-        void update_checksum(const B* data, size_t size)
-        {
-            m_checksum = detail::update_checksum(m_checksum, data, size);
-        }
 
         void auto_resize(size_t new_size) noexcept
         {
@@ -224,7 +229,7 @@ namespace infra::binary_serialization
                 auto_resize(Bytes);
                 memcpy(adaptor_t::data(m_arr) + m_pos, src, Bytes);
 
-                update_checksum(static_cast<const uint8_t*>(src), Bytes);
+                m_checksum = update_checksum(m_checksum, static_cast<const uint8_t*>(src), Bytes);
             }
 
             jump(m_pos + Bytes);
@@ -251,31 +256,31 @@ namespace infra::binary_serialization
             return m_checksum;
         }
 
-        template<detail::is_value T>
+        template<is_value T>
         void value(const T& v) noexcept
         {
             value_impl<sizeof(T)>(&v);
         }
 
-        template<detail::is_structure T>
+        template<is_structure T>
         void structure(const T& s) noexcept
         {
             to_bytes(*this, s);
         }
 
-        template<detail::is_c_array T>
+        template<is_c_array T>
         void c_array(const T& arr) noexcept
         {
             for (size_t i = 0; i < std::extent_v<T>; ++i)
             {
                 const auto& elem = arr[i];
-                using elem_t = std::remove_reference_t<decltype(elem)>;
+                using elem_t = std::remove_cvref_t<decltype(elem)>;
 
-                if constexpr (detail::is_value<elem_t>)
+                if constexpr (is_value<elem_t>)
                 {
                     value(elem);
                 }
-                else if constexpr (detail::is_c_array<elem_t>)
+                else if constexpr (is_c_array<elem_t>)
                 {
                     c_array(elem);
                 }
@@ -289,13 +294,13 @@ namespace infra::binary_serialization
         template<typename T>
         void operator<<(const T& var) noexcept
         {
-            static_assert(detail::is_value<T> || detail::is_c_array<T> || detail::is_structure<T>);
+            static_assert(is_value<T> || is_c_array<T> || is_structure<T>);
 
-            if constexpr (detail::is_value<T>)
+            if constexpr (is_value<T>)
             {
                 value(var);
             }
-            else if constexpr (detail::is_c_array<T>)
+            else if constexpr (is_c_array<T>)
             {
                 c_array(var);
             }
@@ -346,31 +351,31 @@ namespace infra::binary_serialization
         {
         }
 
-        template<detail::is_value T>
+        template<is_value T>
         void value(T& v) noexcept
         {
             value_impl<sizeof(T)>(&v);
         }
 
-        template<detail::is_structure T>
+        template<is_structure T>
         void structure(T& v) noexcept
         {
             from_bytes(*this, v);
         }
 
-        template<detail::is_c_array T>
+        template<is_c_array T>
         void c_array(T& arr) noexcept
         {
             for (size_t i = 0; i < std::extent_v<T>; ++i)
             {
                 auto& elem = arr[i];
-                using elem_t = std::remove_reference_t<decltype(elem)>;
+                using elem_t = std::remove_cvref_t<decltype(elem)>;
 
-                if constexpr (detail::is_value<elem_t>)
+                if constexpr (is_value<elem_t>)
                 {
                     value(elem);
                 }
-                else if constexpr (detail::is_c_array<elem_t>)
+                else if constexpr (is_c_array<elem_t>)
                 {
                     c_array(elem);
                 }
@@ -384,13 +389,13 @@ namespace infra::binary_serialization
         template<typename T>
         void operator>>(T& var) noexcept
         {
-            static_assert(detail::is_value<T> || detail::is_c_array<T> || detail::is_structure<T>);
+            static_assert(is_value<T> || is_c_array<T> || is_structure<T>);
 
-            if constexpr (detail::is_value<T>)
+            if constexpr (is_value<T>)
             {
                 value(var);
             }
-            else if constexpr (detail::is_c_array<T>)
+            else if constexpr (is_c_array<T>)
             {
                 c_array(var);
             }
@@ -488,9 +493,9 @@ namespace infra::binary_serialization
         reader.value(checksum);
         auto& ref_arr = const_cast<ByteContainer&>(byte_array);
         checksum_t test_checksum = InitialChecksum;
-        test_checksum = detail::update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::MagicOffset, detail::MagicSize);
-        test_checksum = detail::update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataOffset, data_length);
-        test_checksum = detail::update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataLengthOffset, detail::DataLengthSize);
+        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::MagicOffset, detail::MagicSize);
+        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataOffset, data_length);
+        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataLengthOffset, detail::DataLengthSize);
         if (test_checksum != checksum)
         {
             result.error = Error::ChecksumIncorrect;

@@ -99,6 +99,17 @@
     #endif
 #endif
 
+// packed struct
+#if INFRA_COMPILER_MSVC
+    #define INFRA_BEGIN_PACKED_STRUCT(name) __pragma(pack(push, 1)) struct name
+    #define INFRA_END_PACKED_STRUCT __pragma(pack(pop))
+#elif INFRA_COMPILER_GCC || INFRA_COMPILER_CLANG
+    #define INFRA_BEGIN_PACKED_STRUCT(name) struct __attribute__((packed)) name
+    #define INFRA_END_PACKED_STRUCT
+#else
+    #error "Compiler not supported"
+#endif
+
 
 // function intrinsics attr
 #define INFRA_FUNC_ATTR_INTRINSICS_SSE

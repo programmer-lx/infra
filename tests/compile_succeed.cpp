@@ -16,6 +16,8 @@
 
 #include <infra/encoding.hpp>
 
+#include <infra/binary_serialization.hpp>
+
 #include <infra/endian.hpp>
 #include <infra/memory.hpp>
 #include <infra/meta.hpp>

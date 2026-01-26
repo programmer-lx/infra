@@ -103,7 +103,7 @@ namespace infra::binary_serialization
     }
     
     template<typename T>
-    concept serializable_integral_value =
+    concept is_serializable_integral =
         meta::is_any_type_of_v<std::remove_cvref_t<T>,
             uint8_t , int8_t ,
             uint16_t, int16_t,
@@ -112,27 +112,29 @@ namespace infra::binary_serialization
         >;
         
     template<typename T>
-    concept serializable_floating_point_value =
+    concept is_serializable_floating_point =
         (std::is_same_v<std::remove_cvref_t<T>, float> && std::numeric_limits<float>::is_iec559) ||
         (std::is_same_v<std::remove_cvref_t<T>, double> && std::numeric_limits<double>::is_iec559);
             
     template<typename T>
-    concept is_serializable_scalar_value = serializable_integral_value<T> || serializable_floating_point_value<T>;
+    concept is_serializable_number = is_serializable_integral<T> || is_serializable_floating_point<T>;
 
     template<typename T>
     concept is_serializable_char_value =
-        std::is_same_v<T, char8_t> || std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>;
+        meta::is_any_type_of_v<std::remove_cvref_t<T>,
+            char8_t, char16_t, char32_t
+        >;
 
     template<typename T>
     concept is_serializable_enum_value =
-        std::is_enum_v<T> &&
-        is_serializable_scalar_value<std::underlying_type_t<T>>;
+        std::is_enum_v<std::remove_cvref_t<T>> &&
+        is_serializable_integral<std::underlying_type_t<std::remove_cvref_t<T>>>;
     
     // 所有基础类型
     template<typename T>
     concept is_value =
-        is_serializable_scalar_value<T>    ||
-        is_serializable_char_value<T>      ||
+        is_serializable_number<T>       ||
+        is_serializable_char_value<T>   ||
         is_serializable_enum_value<T>;
     
     namespace detail

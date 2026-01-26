@@ -1,5 +1,4 @@
 #include <cstdint>
-#include <cassert>
 #include <cstddef>
 
 #include <iostream>
@@ -8,13 +7,18 @@
 #include <string>
 #include <stdexcept>
 
-#include <infra/common.hpp>
 #include <infra/binary_serialization.hpp>
-#include <infra/extension/binary_serialization/adaptor_std_array.hpp>
-#include <infra/extension/binary_serialization/adaptor_std_vector.hpp>
-#include <infra/extension/binary_serialization/structure_std_basic_string.hpp>
+#include <infra/common.hpp>
+#include <infra/extension/binary_serialization/adaptors/std_array.hpp>
+#include <infra/extension/binary_serialization/adaptors/std_vector.hpp>
+#include <infra/extension/binary_serialization/structure/std_u8string.hpp>
+#include <infra/extension/binary_serialization/structure/std_vector.hpp>
 
-#define ASSERT(exp) do { if (!!(exp)) {} else { throw std::runtime_error("error: file: " __FILE__ ", line: " INFRA_STR(__LINE__)); } } while (0)
+#define ASSERT(exp) \
+    do { \
+        if (!!(exp)) {} \
+        else { throw std::runtime_error("error: file: " __FILE__ ", line: " INFRA_STR(__LINE__)); } \
+    } while (0)
 
 struct Storage
 {
@@ -22,6 +26,11 @@ struct Storage
     uint32_t b = 0;
     uint32_t c = 0;
 };
+
+bool operator==(const Storage& lhs, const Storage& rhs)
+{
+    return lhs.a == rhs.a && lhs.b == rhs.b && lhs.c == rhs.c;
+}
 
 namespace infra::binary_serialization
 {
@@ -193,7 +202,11 @@ namespace infra::binary_serialization
 
 struct Storage_CustomStruct
 {
-    std::string std_string;
+    std::u8string std_u8string;
+    std::u8string std_u8string_empty;
+
+    std::vector<Storage> std_vector_1;
+    std::vector<Storage> std_vector_1_empty;
 };
 
 namespace infra::binary_serialization
@@ -204,7 +217,11 @@ namespace infra::binary_serialization
         Storage_CustomStruct& storage
     )
     {
-        reader.structure(storage.std_string);
+        reader >> storage.std_u8string;
+        reader >> storage.std_u8string_empty;
+
+        reader >> storage.std_vector_1;
+        reader >> storage.std_vector_1_empty;
     }
 
     template<typename ByteContainer>
@@ -213,7 +230,11 @@ namespace infra::binary_serialization
         const Storage_CustomStruct& storage
     )
     {
-        writer.structure(storage.std_string);
+        writer << storage.std_u8string;
+        writer << storage.std_u8string_empty;
+
+        writer << storage.std_vector_1;
+        writer << storage.std_vector_1_empty;
     }
 }
 
@@ -1059,7 +1080,45 @@ void error_test()
 
 void custom_structure_test()
 {
+    using namespace infra::binary_serialization;
 
+    {
+        Storage_CustomStruct storage{};
+
+        storage.std_u8string = u8"Hello Binary Serialization 世界🌍";
+        storage.std_u8string_empty = u8"";
+
+        storage.std_vector_1 = {
+            Storage{1, 2, 3},
+            Storage{4, 5, 6},
+            Storage{7, 8, 9}
+        };
+        storage.std_vector_1_empty = {};
+
+        std::vector<uint8_t> buffer{};
+
+        // 序列化
+        auto result1 = infra::binary_serialization::serialize< Adaptor<std::vector<uint8_t>> >(buffer, storage);
+
+        ASSERT(result1);
+        ASSERT(result1.error == Error::OK);
+
+        // 反序列化
+        Storage_CustomStruct back{};
+        auto result2 = infra::binary_serialization::deserialize< Adaptor<std::vector<uint8_t>> >(buffer, back);
+
+        ASSERT(result2);
+        ASSERT(result2.error == Error::OK);
+
+        // 验证结果
+        ASSERT(back.std_u8string == storage.std_u8string);
+        ASSERT(back.std_u8string_empty == u8"");
+
+        ASSERT(back.std_vector_1 == storage.std_vector_1);
+        ASSERT(back.std_vector_1_empty == std::vector<Storage>());
+
+        std::cout << reinterpret_cast<const char*>(back.std_u8string.c_str()) << std::endl;
+    }
 }
 
 int main()

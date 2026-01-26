@@ -285,17 +285,19 @@ namespace infra::binary_serialization
         template<typename T>
         void operator<<(const T& var) noexcept
         {
+            static_assert(detail::is_value<T> || detail::is_c_array<T> || detail::is_structure<T>);
+
             if constexpr (detail::is_value<T>)
             {
                 value(var);
             }
-            else if constexpr (detail::is_structure<T>)
-            {
-                structure(var);
-            }
             else if constexpr (detail::is_c_array<T>)
             {
                 c_array(var);
+            }
+            else
+            {
+                structure(var);
             }
         }
     };
@@ -376,17 +378,19 @@ namespace infra::binary_serialization
         template<typename T>
         void operator>>(T& var) noexcept
         {
+            static_assert(detail::is_value<T> || detail::is_c_array<T> || detail::is_structure<T>);
+
             if constexpr (detail::is_value<T>)
             {
                 value(var);
             }
-            else if constexpr (detail::is_structure<T>)
-            {
-                structure(var);
-            }
             else if constexpr (detail::is_c_array<T>)
             {
                 c_array(var);
+            }
+            else
+            {
+                structure(var);
             }
         }
     };

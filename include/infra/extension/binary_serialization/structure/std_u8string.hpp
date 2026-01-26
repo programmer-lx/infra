@@ -33,6 +33,7 @@ namespace infra::binary_serialization
 
         using str_size_t = std::u8string::size_type;
 
+        str.clear();
         str.resize(static_cast<str_size_t>(size));
 
         for (uint64_t i = 0; i < size; ++i)

@@ -150,8 +150,12 @@ namespace infra::binary_serialization
     class Reader;
 
     // 需要实现接口:
+    // using byte_type   = ByteType of ByteContainer;
+    // using writer_type = Writer<ByteContainer>;
+    // using reader_type = Reader<ByteContainer>;
     // static           size_t       size(const ByteContainer& container)
     // static           ByteType*    data(ByteContainer& container)
+    // static const     ByteType*    data(const ByteContainer& container)
     // static           void         resize(ByteContainer& vec, size_t new_size)
     // static           void         push_back(ByteContainer& vec, const ByteType& val)
     // static constexpr bool         resizeable()
@@ -198,7 +202,7 @@ namespace infra::binary_serialization
 
             if constexpr (!adaptor_t::resizeable())
             {
-                if (m_pos + Bytes >= m_arr.size())
+                if (m_pos + Bytes >= adaptor_t::size(m_arr))
                 {
                     return;
                 }
@@ -207,18 +211,18 @@ namespace infra::binary_serialization
             if constexpr (endian::Current == endian::Endian::Big)
             {
                 uint8_t src_copy[Bytes] = {};
-                memmove(src_copy, src, Bytes);
+                memcpy(src_copy, src, Bytes);
                 endian::to_little(src_copy, Bytes);
 
                 auto_resize(Bytes);
-                memmove(m_arr.data() + m_pos, src_copy, Bytes);
+                memcpy(adaptor_t::data(m_arr) + m_pos, src_copy, Bytes);
 
                 update_checksum(src_copy, Bytes);
             }
             else
             {
                 auto_resize(Bytes);
-                memmove(m_arr.data() + m_pos, src, Bytes);
+                memcpy(adaptor_t::data(m_arr) + m_pos, src, Bytes);
 
                 update_checksum(static_cast<const uint8_t*>(src), Bytes);
             }
@@ -237,12 +241,12 @@ namespace infra::binary_serialization
             m_pos = offset;
         }
 
-        size_t current_offset() const noexcept
+        [[nodiscard]] size_t current_offset() const noexcept
         {
             return m_pos;
         }
 
-        checksum_t checksum() const noexcept
+        [[nodiscard]] checksum_t checksum() const noexcept
         {
             return m_checksum;
         }
@@ -313,7 +317,9 @@ namespace infra::binary_serialization
         template<size_t Bytes>
         void value_impl(void* dst) noexcept
         {
-            if (m_pos + Bytes >= m_arr.size())
+            using adaptor_t = Adaptor<ByteContainer>;
+            
+            if (m_pos + Bytes >= adaptor_t::size(m_arr))
             {
                 return;
             }
@@ -321,14 +327,14 @@ namespace infra::binary_serialization
             if constexpr (endian::Current == endian::Endian::Big)
             {
                 uint8_t src_copy[Bytes] = {};
-                memcpy(src_copy, m_arr.data() + m_pos, Bytes);
+                memcpy(src_copy, adaptor_t::data(m_arr) + m_pos, Bytes);
                 endian::to_little(src_copy, Bytes);
 
                 memcpy(dst, src_copy, Bytes);
             }
             else
             {
-                memcpy(dst, m_arr.data() + m_pos, Bytes);
+                memcpy(dst, adaptor_t::data(m_arr) + m_pos, Bytes);
             }
 
             m_pos += Bytes;

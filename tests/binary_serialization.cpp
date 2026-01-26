@@ -13,6 +13,8 @@
 #include <infra/extension/binary_serialization/adaptors/std_vector.hpp>
 #include <infra/extension/binary_serialization/structure/std_u8string.hpp>
 #include <infra/extension/binary_serialization/structure/std_vector.hpp>
+#include <infra/extension/binary_serialization/structure/std_pair.hpp>
+#include <infra/extension/binary_serialization/structure/std_map.hpp>
 
 #define ASSERT(exp) \
     do { \
@@ -207,6 +209,11 @@ struct Storage_CustomStruct
 
     std::vector<Storage> std_vector_1;
     std::vector<Storage> std_vector_1_empty;
+
+    std::pair<Storage, Storage_Structure> pair_1;
+
+    std::map<std::u8string, Storage> map_1;
+    std::map<std::u8string, Storage> map_1_empty;
 };
 
 namespace infra::binary_serialization
@@ -222,6 +229,11 @@ namespace infra::binary_serialization
 
         reader >> storage.std_vector_1;
         reader >> storage.std_vector_1_empty;
+
+        reader >> storage.pair_1;
+
+        reader >> storage.map_1;
+        reader >> storage.map_1_empty;
     }
 
     template<typename ByteContainer>
@@ -235,6 +247,11 @@ namespace infra::binary_serialization
 
         writer << storage.std_vector_1;
         writer << storage.std_vector_1_empty;
+
+        writer << storage.pair_1;
+
+        writer << storage.map_1;
+        writer << storage.map_1_empty;
     }
 }
 
@@ -1095,6 +1112,25 @@ void custom_structure_test()
         };
         storage.std_vector_1_empty = {};
 
+        storage.pair_1 = std::pair<Storage, Storage_Structure>{
+            Storage{ 0x0102030405060708ULL, 0x11223344, 0x55667788 },
+            Storage_Structure{
+                Storage{ 0xAAAABBBBCCCCDDDDULL, 0x11112222, 0x33334444 },
+                0x9999888877776666ULL,
+                0xABCDEF01,
+                0x1234
+            }
+        };
+
+        storage.map_1 = std::map<std::u8string, Storage>{
+            { u8"first",  Storage{ 0x0102030405060708ULL, 0x11223344, 0x55667788 } },
+            { u8"second", Storage{ 0xAAAABBBBCCCCDDDDULL, 0x11112222, 0x33334444 } },
+            { u8"中文_key", Storage{ 0x9999888877776666ULL, 0xABCDEF01, 0x12345678 } },
+        };
+
+        storage.map_1_empty = {};
+
+
         std::vector<uint8_t> buffer{};
 
         // 序列化
@@ -1116,6 +1152,34 @@ void custom_structure_test()
 
         ASSERT(back.std_vector_1 == storage.std_vector_1);
         ASSERT(back.std_vector_1_empty == std::vector<Storage>());
+
+        ASSERT(back.pair_1.first.a == storage.pair_1.first.a);
+        ASSERT(back.pair_1.first.b == storage.pair_1.first.b);
+        ASSERT(back.pair_1.first.c == storage.pair_1.first.c);
+
+        ASSERT(back.pair_1.second.s.a == storage.pair_1.second.s.a);
+        ASSERT(back.pair_1.second.s.b == storage.pair_1.second.s.b);
+        ASSERT(back.pair_1.second.s.c == storage.pair_1.second.s.c);
+        ASSERT(back.pair_1.second.a   == storage.pair_1.second.a);
+        ASSERT(back.pair_1.second.b   == storage.pair_1.second.b);
+        ASSERT(back.pair_1.second.c   == storage.pair_1.second.c);
+
+        // map_1
+        ASSERT(back.map_1.size() == storage.map_1.size());
+
+        for (const auto& [key, value] : storage.map_1)
+        {
+            auto back_it = back.map_1.find(key);
+            ASSERT(back_it != back.map_1.end());
+
+            ASSERT(back_it->second.a == value.a);
+            ASSERT(back_it->second.b == value.b);
+            ASSERT(back_it->second.c == value.c);
+        }
+
+        // map_1_empty
+        ASSERT(back.map_1_empty.size() == 0);
+        ASSERT(back.map_1_empty == storage.map_1_empty);
 
         std::cout << reinterpret_cast<const char*>(back.std_u8string.c_str()) << std::endl;
     }

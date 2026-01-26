@@ -28,6 +28,11 @@ namespace infra::binary_serialization
             return arr.data();
         }
 
+        static const ByteType* data(const std::array<ByteType, N>& arr) noexcept
+        {
+            return arr.data();
+        }
+
         static void resize(std::array<ByteType, N>&, size_t) noexcept
         {
             // do nothing

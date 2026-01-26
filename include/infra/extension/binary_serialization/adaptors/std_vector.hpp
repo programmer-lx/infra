@@ -28,6 +28,11 @@ namespace infra::binary_serialization
             return vec.data();
         }
 
+        static const ByteType* data(const std::vector<ByteType, Allocator>& vec) noexcept
+        {
+            return vec.data();
+        }
+
         static void resize(std::vector<ByteType, Allocator>& vec, size_t new_size) noexcept
         {
             vec.resize(new_size, static_cast<ByteType>(0));

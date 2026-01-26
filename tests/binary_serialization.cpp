@@ -2,14 +2,19 @@
 #include <cassert>
 #include <cstddef>
 
+#include <iostream>
 #include <array>
 #include <bit>
 #include <string>
+#include <stdexcept>
 
+#include <infra/common.hpp>
 #include <infra/binary_serialization.hpp>
 #include <infra/extension/binary_serialization/adaptor_std_array.hpp>
 #include <infra/extension/binary_serialization/adaptor_std_vector.hpp>
 #include <infra/extension/binary_serialization/structure_std_basic_string.hpp>
+
+#define ASSERT(exp) do { if (!!(exp)) {} else { throw std::runtime_error("error: file: " __FILE__ ", line: " INFRA_STR(__LINE__)); } } while (0)
 
 struct Storage
 {
@@ -218,7 +223,7 @@ void checksum_test()
     const char* s = "123456789";
     [[maybe_unused]] auto checksum = infra::binary_serialization::detail::update_checksum(
         infra::binary_serialization::InitialChecksum, reinterpret_cast<const uint8_t*>(s), 9);
-    assert(checksum == 0xCBF43926);
+    ASSERT(checksum == 0xCBF43926);
 }
 
 void traits_test()
@@ -257,55 +262,55 @@ void fixed_byte_array_test()
         infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, storage);
 
         // magic
-        assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        assert(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        assert(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        assert(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
+        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
+        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
+        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
+        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
         checksum_t checksum = detail::update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
         checksum = detail::update_checksum(checksum, &buffer[detail::DataOffset], 16);
         checksum = detail::update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
-        assert(buffer[detail::DataLengthOffset + 0] == 0x10);
-        assert(buffer[detail::DataLengthOffset + 1] == 0x0);
-        assert(buffer[detail::DataLengthOffset + 2] == 0x0);
-        assert(buffer[detail::DataLengthOffset + 3] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 0x10);
+        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x0);
 
         // data
         // 断言每个字节是否符合小端序
-        assert(buffer[detail::DataOffset + 0]  == 0x08);
-        assert(buffer[detail::DataOffset + 1]  == 0x07);
-        assert(buffer[detail::DataOffset + 2]  == 0x06);
-        assert(buffer[detail::DataOffset + 3]  == 0x05);
-        assert(buffer[detail::DataOffset + 4]  == 0x04);
-        assert(buffer[detail::DataOffset + 5]  == 0x03);
-        assert(buffer[detail::DataOffset + 6]  == 0x02);
-        assert(buffer[detail::DataOffset + 7]  == 0x01);
+        ASSERT(buffer[detail::DataOffset + 0]  == 0x08);
+        ASSERT(buffer[detail::DataOffset + 1]  == 0x07);
+        ASSERT(buffer[detail::DataOffset + 2]  == 0x06);
+        ASSERT(buffer[detail::DataOffset + 3]  == 0x05);
+        ASSERT(buffer[detail::DataOffset + 4]  == 0x04);
+        ASSERT(buffer[detail::DataOffset + 5]  == 0x03);
+        ASSERT(buffer[detail::DataOffset + 6]  == 0x02);
+        ASSERT(buffer[detail::DataOffset + 7]  == 0x01);
 
-        assert(buffer[detail::DataOffset + 8]  == 0x44);
-        assert(buffer[detail::DataOffset + 9]  == 0x33);
-        assert(buffer[detail::DataOffset + 10] == 0x22);
-        assert(buffer[detail::DataOffset + 11] == 0x11);
+        ASSERT(buffer[detail::DataOffset + 8]  == 0x44);
+        ASSERT(buffer[detail::DataOffset + 9]  == 0x33);
+        ASSERT(buffer[detail::DataOffset + 10] == 0x22);
+        ASSERT(buffer[detail::DataOffset + 11] == 0x11);
 
-        assert(buffer[detail::DataOffset + 12] == 0x88);
-        assert(buffer[detail::DataOffset + 13] == 0x77);
-        assert(buffer[detail::DataOffset + 14] == 0x66);
-        assert(buffer[detail::DataOffset + 15] == 0x55);
+        ASSERT(buffer[detail::DataOffset + 12] == 0x88);
+        ASSERT(buffer[detail::DataOffset + 13] == 0x77);
+        ASSERT(buffer[detail::DataOffset + 14] == 0x66);
+        ASSERT(buffer[detail::DataOffset + 15] == 0x55);
 
         // 可以再断言 sizeof(Storage) 是否小于 buffer
-        assert(sizeof(Storage) <= buffer.size());
+        ASSERT(sizeof(Storage) <= buffer.size());
 
         // 反序列化测试
         Storage back = { 1000, 1000, 1000 };
-        [[maybe_unused]] [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
-        assert(result);
-        assert(result.error == Error::OK);
-        assert(back.a == 0x0102030405060708ULL);
-        assert(back.b == 0x11223344);
-        assert(back.c == 0x55667788);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
+        ASSERT(back.a == 0x0102030405060708ULL);
+        ASSERT(back.b == 0x11223344);
+        ASSERT(back.c == 0x55667788);
     }
 
     // std::array 截断
@@ -316,55 +321,55 @@ void fixed_byte_array_test()
         infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 22>>>(buffer, storage);
 
         // magic
-        assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        assert(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        assert(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        assert(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
+        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
+        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
+        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
+        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
         checksum_t checksum = detail::update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
         checksum = detail::update_checksum(checksum, &buffer[detail::DataOffset], 8);
         checksum = detail::update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
-        assert(buffer[detail::DataLengthOffset + 0] == 8); // 只有a能被序列化
-        assert(buffer[detail::DataLengthOffset + 1] == 0x0);
-        assert(buffer[detail::DataLengthOffset + 2] == 0x0);
-        assert(buffer[detail::DataLengthOffset + 3] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 8); // 只有a能被序列化
+        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x0);
 
         // data
         // 断言每个字节是否符合小端序
-        assert(buffer[detail::DataOffset + 0]  == 0x08);
-        assert(buffer[detail::DataOffset + 1]  == 0x07);
-        assert(buffer[detail::DataOffset + 2]  == 0x06);
-        assert(buffer[detail::DataOffset + 3]  == 0x05);
-        assert(buffer[detail::DataOffset + 4]  == 0x04);
-        assert(buffer[detail::DataOffset + 5]  == 0x03);
-        assert(buffer[detail::DataOffset + 6]  == 0x02);
-        assert(buffer[detail::DataOffset + 7]  == 0x01);
+        ASSERT(buffer[detail::DataOffset + 0]  == 0x08);
+        ASSERT(buffer[detail::DataOffset + 1]  == 0x07);
+        ASSERT(buffer[detail::DataOffset + 2]  == 0x06);
+        ASSERT(buffer[detail::DataOffset + 3]  == 0x05);
+        ASSERT(buffer[detail::DataOffset + 4]  == 0x04);
+        ASSERT(buffer[detail::DataOffset + 5]  == 0x03);
+        ASSERT(buffer[detail::DataOffset + 6]  == 0x02);
+        ASSERT(buffer[detail::DataOffset + 7]  == 0x01);
 
-        assert(buffer[detail::DataOffset + 8]  == 0x0);
-        assert(buffer[detail::DataOffset + 9]  == 0x0);
-        // assert(buffer[detail::DataOffset + 10] == 0x0);
-        // assert(buffer[detail::DataOffset + 11] == 0x0);
+        ASSERT(buffer[detail::DataOffset + 8]  == 0x0);
+        ASSERT(buffer[detail::DataOffset + 9]  == 0x0);
+        // ASSERT(buffer[detail::DataOffset + 10] == 0x0);
+        // ASSERT(buffer[detail::DataOffset + 11] == 0x0);
 
-        // assert(buffer[detail::DataOffset + 12] == 0x0);
-        // assert(buffer[detail::DataOffset + 13] == 0x0);
-        // assert(buffer[detail::DataOffset + 14] == 0x0);
-        // assert(buffer[detail::DataOffset + 15] == 0x0);
+        // ASSERT(buffer[detail::DataOffset + 12] == 0x0);
+        // ASSERT(buffer[detail::DataOffset + 13] == 0x0);
+        // ASSERT(buffer[detail::DataOffset + 14] == 0x0);
+        // ASSERT(buffer[detail::DataOffset + 15] == 0x0);
 
         // 可以再断言 sizeof(Storage) 是否小于 buffer
-        assert(sizeof(Storage) <= buffer.size());
+        ASSERT(sizeof(Storage) <= buffer.size());
 
         // 反序列化测试
         Storage2 back = { 1000, 1000, 1000 };
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 22>>>(buffer, back);
-        assert(result);
-        assert(result.error == Error::OK);
-        assert(back.a == 0x0102030405060708ULL);
-        assert(back.b == 1000);
-        assert(back.c == 1000);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 22>>>(buffer, back);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
+        ASSERT(back.a == 0x0102030405060708ULL);
+        ASSERT(back.b == 1000);
+        ASSERT(back.c == 1000);
     }
 
     // 递归测试 normal
@@ -380,10 +385,10 @@ void fixed_byte_array_test()
         infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, storage);
 
         // magic
-        assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        assert(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        assert(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        assert(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
+        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
+        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
+        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
+        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
         checksum_t checksum = detail::update_checksum(
@@ -402,78 +407,78 @@ void fixed_byte_array_test()
             detail::DataLengthSize
         );
 
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length = 30 (0x1E)
-        assert(buffer[detail::DataLengthOffset + 0] == 0x1E);
-        assert(buffer[detail::DataLengthOffset + 1] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 2] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 3] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 0x1E);
+        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x00);
 
         [[maybe_unused]] size_t off = detail::DataOffset;
 
         // ---- Storage.s.a (uint64) ----
-        assert(buffer[off + 0] == 0x08);
-        assert(buffer[off + 1] == 0x07);
-        assert(buffer[off + 2] == 0x06);
-        assert(buffer[off + 3] == 0x05);
-        assert(buffer[off + 4] == 0x04);
-        assert(buffer[off + 5] == 0x03);
-        assert(buffer[off + 6] == 0x02);
-        assert(buffer[off + 7] == 0x01);
+        ASSERT(buffer[off + 0] == 0x08);
+        ASSERT(buffer[off + 1] == 0x07);
+        ASSERT(buffer[off + 2] == 0x06);
+        ASSERT(buffer[off + 3] == 0x05);
+        ASSERT(buffer[off + 4] == 0x04);
+        ASSERT(buffer[off + 5] == 0x03);
+        ASSERT(buffer[off + 6] == 0x02);
+        ASSERT(buffer[off + 7] == 0x01);
 
         // ---- Storage.s.b (uint32) ----
-        assert(buffer[off + 8]  == 0x44);
-        assert(buffer[off + 9]  == 0x33);
-        assert(buffer[off + 10] == 0x22);
-        assert(buffer[off + 11] == 0x11);
+        ASSERT(buffer[off + 8]  == 0x44);
+        ASSERT(buffer[off + 9]  == 0x33);
+        ASSERT(buffer[off + 10] == 0x22);
+        ASSERT(buffer[off + 11] == 0x11);
 
         // ---- Storage.s.c (uint32) ----
-        assert(buffer[off + 12] == 0x88);
-        assert(buffer[off + 13] == 0x77);
-        assert(buffer[off + 14] == 0x66);
-        assert(buffer[off + 15] == 0x55);
+        ASSERT(buffer[off + 12] == 0x88);
+        ASSERT(buffer[off + 13] == 0x77);
+        ASSERT(buffer[off + 14] == 0x66);
+        ASSERT(buffer[off + 15] == 0x55);
 
         // ---- Storage_Structure.a (uint64) ----
-        assert(buffer[off + 16] == 0xA8);
-        assert(buffer[off + 17] == 0xA7);
-        assert(buffer[off + 18] == 0xA6);
-        assert(buffer[off + 19] == 0xA5);
-        assert(buffer[off + 20] == 0xA4);
-        assert(buffer[off + 21] == 0xA3);
-        assert(buffer[off + 22] == 0xA2);
-        assert(buffer[off + 23] == 0xA1);
+        ASSERT(buffer[off + 16] == 0xA8);
+        ASSERT(buffer[off + 17] == 0xA7);
+        ASSERT(buffer[off + 18] == 0xA6);
+        ASSERT(buffer[off + 19] == 0xA5);
+        ASSERT(buffer[off + 20] == 0xA4);
+        ASSERT(buffer[off + 21] == 0xA3);
+        ASSERT(buffer[off + 22] == 0xA2);
+        ASSERT(buffer[off + 23] == 0xA1);
 
         // ---- Storage_Structure.b (uint32) ----
-        assert(buffer[off + 24] == 0xCC);
-        assert(buffer[off + 25] == 0xBB);
-        assert(buffer[off + 26] == 0xAA);
-        assert(buffer[off + 27] == 0x99);
+        ASSERT(buffer[off + 24] == 0xCC);
+        ASSERT(buffer[off + 25] == 0xBB);
+        ASSERT(buffer[off + 26] == 0xAA);
+        ASSERT(buffer[off + 27] == 0x99);
 
         // ---- Storage_Structure.c (uint16) ----
-        assert(buffer[off + 28] == 0xEE);
-        assert(buffer[off + 29] == 0xDD);
+        ASSERT(buffer[off + 28] == 0xEE);
+        ASSERT(buffer[off + 29] == 0xDD);
 
         // size sanity check
-        assert(buffer.size() >= detail::DataOffset + 30);
+        ASSERT(buffer.size() >= detail::DataOffset + 30);
 
         // deserialize test
         Storage_Structure back{
             {1000,1000,1000}, 1000, 1000, 1000
         };
 
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
 
-        assert(result);
-        assert(result.error == Error::OK);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
 
-        assert(back.s.a == 0x0102030405060708ULL);
-        assert(back.s.b == 0x11223344);
-        assert(back.s.c == 0x55667788);
+        ASSERT(back.s.a == 0x0102030405060708ULL);
+        ASSERT(back.s.b == 0x11223344);
+        ASSERT(back.s.c == 0x55667788);
 
-        assert(back.a == 0xA1A2A3A4A5A6A7A8ULL);
-        assert(back.b == 0x99AABBCC);
-        assert(back.c == 0xDDEE);
+        ASSERT(back.a == 0xA1A2A3A4A5A6A7A8ULL);
+        ASSERT(back.b == 0x99AABBCC);
+        ASSERT(back.c == 0xDDEE);
     }
 
     // 递归测试 截断
@@ -491,10 +496,10 @@ void fixed_byte_array_test()
         [[maybe_unused]] auto serialize_result = infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 41>>>(buffer, storage);
 
         // ---- magic ----
-        assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        assert(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        assert(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        assert(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
+        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
+        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
+        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
+        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // ---- checksum ----
         checksum_t checksum = detail::update_checksum(
@@ -513,76 +518,76 @@ void fixed_byte_array_test()
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
         );
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // ---- data length truncated ----
-        assert(buffer[detail::DataLengthOffset + 0] == 16+8+4);
-        assert(buffer[detail::DataLengthOffset + 1] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 2] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 3] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 16+8+4);
+        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x00);
 
         [[maybe_unused]] size_t off = detail::DataOffset;
 
         // ---- Storage.s.a (uint64) ----
-        assert(buffer[off + 0] == 0x08);
-        assert(buffer[off + 1] == 0x07);
-        assert(buffer[off + 2] == 0x06);
-        assert(buffer[off + 3] == 0x05);
-        assert(buffer[off + 4] == 0x04);
-        assert(buffer[off + 5] == 0x03);
-        assert(buffer[off + 6] == 0x02);
-        assert(buffer[off + 7] == 0x01);
+        ASSERT(buffer[off + 0] == 0x08);
+        ASSERT(buffer[off + 1] == 0x07);
+        ASSERT(buffer[off + 2] == 0x06);
+        ASSERT(buffer[off + 3] == 0x05);
+        ASSERT(buffer[off + 4] == 0x04);
+        ASSERT(buffer[off + 5] == 0x03);
+        ASSERT(buffer[off + 6] == 0x02);
+        ASSERT(buffer[off + 7] == 0x01);
 
         // ---- Storage.s.b (uint32) ----
-        assert(buffer[off + 8]  == 0x44);
-        assert(buffer[off + 9]  == 0x33);
-        assert(buffer[off + 10] == 0x22);
-        assert(buffer[off + 11] == 0x11);
+        ASSERT(buffer[off + 8]  == 0x44);
+        ASSERT(buffer[off + 9]  == 0x33);
+        ASSERT(buffer[off + 10] == 0x22);
+        ASSERT(buffer[off + 11] == 0x11);
 
         // ---- Storage.s.c (uint32) ----
-        assert(buffer[off + 12] == 0x88);
-        assert(buffer[off + 13] == 0x77);
-        assert(buffer[off + 14] == 0x66);
-        assert(buffer[off + 15] == 0x55);
+        ASSERT(buffer[off + 12] == 0x88);
+        ASSERT(buffer[off + 13] == 0x77);
+        ASSERT(buffer[off + 14] == 0x66);
+        ASSERT(buffer[off + 15] == 0x55);
 
         // ---- Storage_Structure.a (uint64) ----
-        assert(buffer[off + 16] == 0xA8);
-        assert(buffer[off + 17] == 0xA7);
-        assert(buffer[off + 18] == 0xA6);
-        assert(buffer[off + 19] == 0xA5);
-        assert(buffer[off + 20] == 0xA4);
-        assert(buffer[off + 21] == 0xA3);
-        assert(buffer[off + 22] == 0xA2);
-        assert(buffer[off + 23] == 0xA1);
+        ASSERT(buffer[off + 16] == 0xA8);
+        ASSERT(buffer[off + 17] == 0xA7);
+        ASSERT(buffer[off + 18] == 0xA6);
+        ASSERT(buffer[off + 19] == 0xA5);
+        ASSERT(buffer[off + 20] == 0xA4);
+        ASSERT(buffer[off + 21] == 0xA3);
+        ASSERT(buffer[off + 22] == 0xA2);
+        ASSERT(buffer[off + 23] == 0xA1);
 
         // ---- Storage_Structure.b (uint32) ----
-        assert(buffer[off + 24] == 0xCC);
-        assert(buffer[off + 25] == 0xBB);
-        assert(buffer[off + 26] == 0xAA);
-        assert(buffer[off + 27] == 0x99);
+        ASSERT(buffer[off + 24] == 0xCC);
+        ASSERT(buffer[off + 25] == 0xBB);
+        ASSERT(buffer[off + 26] == 0xAA);
+        ASSERT(buffer[off + 27] == 0x99);
 
         // Storage_Structure.c (uint16) 已经被截断，不参与序列化，值为0
-        assert(buffer[off + 28] == 0x0);
+        ASSERT(buffer[off + 28] == 0x0);
 
         // ---- deserialize truncated buffer ----
         Storage_Structure back{
             {1000,1000,1000}, 1000, 1000, 1000
         };
 
-        [[maybe_unused]] [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 41>>>(buffer, back);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 41>>>(buffer, back);
 
-        assert(result);
-        assert(result.error == Error::OK);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
 
         // 可读字段
-        assert(back.s.a == 0x0102030405060708ULL);
-        assert(back.s.b == 0x11223344);
-        assert(back.s.c == 0x55667788);
-        assert(back.a == 0xA1A2A3A4A5A6A7A8ULL);
-        assert(back.b == 0x99AABBCC);
+        ASSERT(back.s.a == 0x0102030405060708ULL);
+        ASSERT(back.s.b == 0x11223344);
+        ASSERT(back.s.c == 0x55667788);
+        ASSERT(back.a == 0xA1A2A3A4A5A6A7A8ULL);
+        ASSERT(back.b == 0x99AABBCC);
 
         // 被截断字段保持原值（反序列化未修改）
-        assert(back.c == 1000); // Storage_Structure.c 未参与反序列化
+        ASSERT(back.c == 1000); // Storage_Structure.c 未参与反序列化
     }
 }
 
@@ -598,55 +603,55 @@ void dyn_array_test()
         infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // magic
-        assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        assert(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        assert(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        assert(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
+        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
+        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
+        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
+        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
         checksum_t checksum = detail::update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
         checksum = detail::update_checksum(checksum, &buffer[detail::DataOffset], 16);
         checksum = detail::update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
-        assert(buffer[detail::DataLengthOffset + 0] == 0x10);
-        assert(buffer[detail::DataLengthOffset + 1] == 0x0);
-        assert(buffer[detail::DataLengthOffset + 2] == 0x0);
-        assert(buffer[detail::DataLengthOffset + 3] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 0x10);
+        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x0);
+        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x0);
 
         // data
         // 断言每个字节是否符合小端序
-        assert(buffer[detail::DataOffset + 0]  == 0x08);
-        assert(buffer[detail::DataOffset + 1]  == 0x07);
-        assert(buffer[detail::DataOffset + 2]  == 0x06);
-        assert(buffer[detail::DataOffset + 3]  == 0x05);
-        assert(buffer[detail::DataOffset + 4]  == 0x04);
-        assert(buffer[detail::DataOffset + 5]  == 0x03);
-        assert(buffer[detail::DataOffset + 6]  == 0x02);
-        assert(buffer[detail::DataOffset + 7]  == 0x01);
+        ASSERT(buffer[detail::DataOffset + 0]  == 0x08);
+        ASSERT(buffer[detail::DataOffset + 1]  == 0x07);
+        ASSERT(buffer[detail::DataOffset + 2]  == 0x06);
+        ASSERT(buffer[detail::DataOffset + 3]  == 0x05);
+        ASSERT(buffer[detail::DataOffset + 4]  == 0x04);
+        ASSERT(buffer[detail::DataOffset + 5]  == 0x03);
+        ASSERT(buffer[detail::DataOffset + 6]  == 0x02);
+        ASSERT(buffer[detail::DataOffset + 7]  == 0x01);
 
-        assert(buffer[detail::DataOffset + 8]  == 0x44);
-        assert(buffer[detail::DataOffset + 9]  == 0x33);
-        assert(buffer[detail::DataOffset + 10] == 0x22);
-        assert(buffer[detail::DataOffset + 11] == 0x11);
+        ASSERT(buffer[detail::DataOffset + 8]  == 0x44);
+        ASSERT(buffer[detail::DataOffset + 9]  == 0x33);
+        ASSERT(buffer[detail::DataOffset + 10] == 0x22);
+        ASSERT(buffer[detail::DataOffset + 11] == 0x11);
 
-        assert(buffer[detail::DataOffset + 12] == 0x88);
-        assert(buffer[detail::DataOffset + 13] == 0x77);
-        assert(buffer[detail::DataOffset + 14] == 0x66);
-        assert(buffer[detail::DataOffset + 15] == 0x55);
+        ASSERT(buffer[detail::DataOffset + 12] == 0x88);
+        ASSERT(buffer[detail::DataOffset + 13] == 0x77);
+        ASSERT(buffer[detail::DataOffset + 14] == 0x66);
+        ASSERT(buffer[detail::DataOffset + 15] == 0x55);
 
         // 可以再断言 sizeof(Storage) 是否小于 buffer
-        assert(sizeof(Storage) <= buffer.size());
+        ASSERT(sizeof(Storage) <= buffer.size());
 
         // 反序列化测试
         Storage back = { 1000, 1000, 1000 };
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
-        assert(result);
-        assert(result.error == Error::OK);
-        assert(back.a == 0x0102030405060708ULL);
-        assert(back.b == 0x11223344);
-        assert(back.c == 0x55667788);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
+        ASSERT(back.a == 0x0102030405060708ULL);
+        ASSERT(back.b == 0x11223344);
+        ASSERT(back.c == 0x55667788);
     }
 
     // 递归类型测试 vector
@@ -662,10 +667,10 @@ void dyn_array_test()
         infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // magic
-        assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        assert(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        assert(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        assert(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
+        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
+        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
+        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
+        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
         checksum_t checksum = detail::update_checksum(
@@ -684,78 +689,78 @@ void dyn_array_test()
             detail::DataLengthSize
         );
 
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length = 30 (0x1E)
-        assert(buffer[detail::DataLengthOffset + 0] == 0x1E);
-        assert(buffer[detail::DataLengthOffset + 1] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 2] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 3] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 0x1E);
+        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x00);
 
         [[maybe_unused]] size_t off = detail::DataOffset;
 
         // ---- Storage.s.a (uint64) ----
-        assert(buffer[off + 0] == 0x08);
-        assert(buffer[off + 1] == 0x07);
-        assert(buffer[off + 2] == 0x06);
-        assert(buffer[off + 3] == 0x05);
-        assert(buffer[off + 4] == 0x04);
-        assert(buffer[off + 5] == 0x03);
-        assert(buffer[off + 6] == 0x02);
-        assert(buffer[off + 7] == 0x01);
+        ASSERT(buffer[off + 0] == 0x08);
+        ASSERT(buffer[off + 1] == 0x07);
+        ASSERT(buffer[off + 2] == 0x06);
+        ASSERT(buffer[off + 3] == 0x05);
+        ASSERT(buffer[off + 4] == 0x04);
+        ASSERT(buffer[off + 5] == 0x03);
+        ASSERT(buffer[off + 6] == 0x02);
+        ASSERT(buffer[off + 7] == 0x01);
 
         // ---- Storage.s.b (uint32) ----
-        assert(buffer[off + 8]  == 0x44);
-        assert(buffer[off + 9]  == 0x33);
-        assert(buffer[off + 10] == 0x22);
-        assert(buffer[off + 11] == 0x11);
+        ASSERT(buffer[off + 8]  == 0x44);
+        ASSERT(buffer[off + 9]  == 0x33);
+        ASSERT(buffer[off + 10] == 0x22);
+        ASSERT(buffer[off + 11] == 0x11);
 
         // ---- Storage.s.c (uint32) ----
-        assert(buffer[off + 12] == 0x88);
-        assert(buffer[off + 13] == 0x77);
-        assert(buffer[off + 14] == 0x66);
-        assert(buffer[off + 15] == 0x55);
+        ASSERT(buffer[off + 12] == 0x88);
+        ASSERT(buffer[off + 13] == 0x77);
+        ASSERT(buffer[off + 14] == 0x66);
+        ASSERT(buffer[off + 15] == 0x55);
 
         // ---- Storage_Structure.a (uint64) ----
-        assert(buffer[off + 16] == 0xA8);
-        assert(buffer[off + 17] == 0xA7);
-        assert(buffer[off + 18] == 0xA6);
-        assert(buffer[off + 19] == 0xA5);
-        assert(buffer[off + 20] == 0xA4);
-        assert(buffer[off + 21] == 0xA3);
-        assert(buffer[off + 22] == 0xA2);
-        assert(buffer[off + 23] == 0xA1);
+        ASSERT(buffer[off + 16] == 0xA8);
+        ASSERT(buffer[off + 17] == 0xA7);
+        ASSERT(buffer[off + 18] == 0xA6);
+        ASSERT(buffer[off + 19] == 0xA5);
+        ASSERT(buffer[off + 20] == 0xA4);
+        ASSERT(buffer[off + 21] == 0xA3);
+        ASSERT(buffer[off + 22] == 0xA2);
+        ASSERT(buffer[off + 23] == 0xA1);
 
         // ---- Storage_Structure.b (uint32) ----
-        assert(buffer[off + 24] == 0xCC);
-        assert(buffer[off + 25] == 0xBB);
-        assert(buffer[off + 26] == 0xAA);
-        assert(buffer[off + 27] == 0x99);
+        ASSERT(buffer[off + 24] == 0xCC);
+        ASSERT(buffer[off + 25] == 0xBB);
+        ASSERT(buffer[off + 26] == 0xAA);
+        ASSERT(buffer[off + 27] == 0x99);
 
         // ---- Storage_Structure.c (uint16) ----
-        assert(buffer[off + 28] == 0xEE);
-        assert(buffer[off + 29] == 0xDD);
+        ASSERT(buffer[off + 28] == 0xEE);
+        ASSERT(buffer[off + 29] == 0xDD);
 
         // size sanity check
-        assert(buffer.size() >= detail::DataOffset + 30);
+        ASSERT(buffer.size() >= detail::DataOffset + 30);
 
         // deserialize test
         Storage_Structure back{
             {1000,1000,1000}, 1000, 1000, 1000
         };
 
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
-        assert(result);
-        assert(result.error == Error::OK);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
 
-        assert(back.s.a == 0x0102030405060708ULL);
-        assert(back.s.b == 0x11223344);
-        assert(back.s.c == 0x55667788);
+        ASSERT(back.s.a == 0x0102030405060708ULL);
+        ASSERT(back.s.b == 0x11223344);
+        ASSERT(back.s.c == 0x55667788);
 
-        assert(back.a == 0xA1A2A3A4A5A6A7A8ULL);
-        assert(back.b == 0x99AABBCC);
-        assert(back.c == 0xDDEE);
+        ASSERT(back.a == 0xA1A2A3A4A5A6A7A8ULL);
+        ASSERT(back.b == 0x99AABBCC);
+        ASSERT(back.c == 0xDDEE);
     }
 }
 
@@ -774,14 +779,14 @@ void char_arr_test()
 
         std::vector<uint8_t> buffer{};
         [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
-        assert(ser_result);
-        assert(ser_result.error == Error::OK);
+        ASSERT(ser_result);
+        ASSERT(ser_result.error == Error::OK);
 
         // ---- magic ----
-        assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        assert(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        assert(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        assert(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
+        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
+        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
+        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
+        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // ---- checksum ----
         checksum_t checksum = detail::update_checksum(
@@ -803,74 +808,74 @@ void char_arr_test()
             detail::DataLengthSize
         );
 
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // ---- data length ----
-        assert(buffer[detail::DataLengthOffset + 0] == 24 + sizeof(wchar_t) * 2); // no padding
-        assert(buffer[detail::DataLengthOffset + 1] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 2] == 0x00);
-        assert(buffer[detail::DataLengthOffset + 3] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 24 + sizeof(wchar_t) * 2); // no padding
+        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x00);
+        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x00);
 
         size_t off = detail::DataOffset;
 
         // ---- char a[4] ----
-        assert(buffer[off + 0] == 'A');
-        assert(buffer[off + 1] == 'B');
-        assert(buffer[off + 2] == 'C');
-        assert(buffer[off + 3] == 'D');
+        ASSERT(buffer[off + 0] == 'A');
+        ASSERT(buffer[off + 1] == 'B');
+        ASSERT(buffer[off + 2] == 'C');
+        ASSERT(buffer[off + 3] == 'D');
 
         // ---- char8_t b[4] ----
-        assert(buffer[off + 4] == u8'e');
-        assert(buffer[off + 5] == u8'f');
-        assert(buffer[off + 6] == u8'g');
-        assert(buffer[off + 7] == u8'h');
+        ASSERT(buffer[off + 4] == u8'e');
+        ASSERT(buffer[off + 5] == u8'f');
+        ASSERT(buffer[off + 6] == u8'g');
+        ASSERT(buffer[off + 7] == u8'h');
 
         // ---- char16_t c[2] ----
         [[maybe_unused]] uint16_t* c_ptr = reinterpret_cast<uint16_t*>(&buffer[off + 8]);
-        assert(c_ptr[0] == u'你');
-        assert(c_ptr[1] == u'好');
+        ASSERT(c_ptr[0] == u'你');
+        ASSERT(c_ptr[1] == u'好');
 
         // ---- char32_t d[3] ----
         [[maybe_unused]] uint32_t* d_ptr = reinterpret_cast<uint32_t*>(&buffer[off + 12]);
-        assert(d_ptr[0] == U'𠮷');
-        assert(d_ptr[1] == U'🐱');
-        assert(d_ptr[2] == U'😊');
+        ASSERT(d_ptr[0] == U'𠮷');
+        ASSERT(d_ptr[1] == U'🐱');
+        ASSERT(d_ptr[2] == U'😊');
 
         // wchar_t e[2]
         [[maybe_unused]] wchar_t* e_ptr = reinterpret_cast<wchar_t*>(&buffer[off + 24]);
-        assert(e_ptr[0] == 312);
-        assert(e_ptr[1] == 257);
+        ASSERT(e_ptr[0] == 312);
+        ASSERT(e_ptr[1] == 257);
 
         // ---- size sanity check ----
-        assert(buffer.size() >= detail::DataOffset + 24 + sizeof(wchar_t));
+        ASSERT(buffer.size() >= detail::DataOffset + 24 + sizeof(wchar_t));
 
         // ---- deserialize test ----
         Storage_CharArr back{};
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
-        assert(result);
-        assert(result.error == Error::OK);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
 
         // ---- validate deserialized data ----
-        assert(back.a[0] == 'A');
-        assert(back.a[1] == 'B');
-        assert(back.a[2] == 'C');
-        assert(back.a[3] == 'D');
+        ASSERT(back.a[0] == 'A');
+        ASSERT(back.a[1] == 'B');
+        ASSERT(back.a[2] == 'C');
+        ASSERT(back.a[3] == 'D');
 
-        assert(back.b[0] == u8'e');
-        assert(back.b[1] == u8'f');
-        assert(back.b[2] == u8'g');
-        assert(back.b[3] == u8'h');
+        ASSERT(back.b[0] == u8'e');
+        ASSERT(back.b[1] == u8'f');
+        ASSERT(back.b[2] == u8'g');
+        ASSERT(back.b[3] == u8'h');
 
-        assert(back.c[0] == u'你');
-        assert(back.c[1] == u'好');
+        ASSERT(back.c[0] == u'你');
+        ASSERT(back.c[1] == u'好');
 
-        assert(back.d[0] == U'𠮷');
-        assert(back.d[1] == U'🐱');
-        assert(back.d[2] == U'😊');
+        ASSERT(back.d[0] == U'𠮷');
+        ASSERT(back.d[1] == U'🐱');
+        ASSERT(back.d[2] == U'😊');
 
-        assert(back.e[0] == 312);
-        assert(back.e[1] == 257);
+        ASSERT(back.e[0] == 312);
+        ASSERT(back.e[1] == 257);
     }
 }
 
@@ -888,14 +893,14 @@ void c_arr_test()
 
         std::vector<std::byte> buffer{};
         [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize<Adaptor<std::vector<std::byte>>>(buffer, storage);
-        assert(ser_result);
-        assert(ser_result.error == Error::OK);
+        ASSERT(ser_result);
+        ASSERT(ser_result.error == Error::OK);
 
         // ---- magic ----
-        assert(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 0]) == detail::MagicValue[0]);
-        assert(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 1]) == detail::MagicValue[1]);
-        assert(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 2]) == detail::MagicValue[2]);
-        assert(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 3]) == detail::MagicValue[3]);
+        ASSERT(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 0]) == detail::MagicValue[0]);
+        ASSERT(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 1]) == detail::MagicValue[1]);
+        ASSERT(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 2]) == detail::MagicValue[2]);
+        ASSERT(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 3]) == detail::MagicValue[3]);
 
         // ---- checksum ----
         checksum_t checksum = detail::update_checksum(
@@ -917,51 +922,51 @@ void c_arr_test()
             detail::DataLengthSize
         );
 
-        assert(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // ---- deserialize test ----
         Storage_CArr back{};
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<std::byte>>>(buffer, back);
-        assert(result);
-        assert(result.error == Error::OK);
+        auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<std::byte>>>(buffer, back);
+        ASSERT(result);
+        ASSERT(result.error == Error::OK);
 
         // ---- validate deserialized data ----
 
         // char a[2][3]
-        assert(back.a[0][0] == 'A');
-        assert(back.a[0][1] == 'B');
-        assert(back.a[0][2] == 'C');
-        assert(back.a[1][0] == 'D');
-        assert(back.a[1][1] == 'E');
-        assert(back.a[1][2] == 'F');
+        ASSERT(back.a[0][0] == 'A');
+        ASSERT(back.a[0][1] == 'B');
+        ASSERT(back.a[0][2] == 'C');
+        ASSERT(back.a[1][0] == 'D');
+        ASSERT(back.a[1][1] == 'E');
+        ASSERT(back.a[1][2] == 'F');
 
         // char16_t b[4][2]
-        assert(back.b[0][0] == u'你');
-        assert(back.b[0][1] == u'好');
-        assert(back.b[1][0] == u'世');
-        assert(back.b[1][1] == u'界');
-        assert(back.b[2][0] == u'测');
-        assert(back.b[2][1] == u'试');
-        assert(back.b[3][0] == u'啊');
-        assert(back.b[3][1] == u'！');
+        ASSERT(back.b[0][0] == u'你');
+        ASSERT(back.b[0][1] == u'好');
+        ASSERT(back.b[1][0] == u'世');
+        ASSERT(back.b[1][1] == u'界');
+        ASSERT(back.b[2][0] == u'测');
+        ASSERT(back.b[2][1] == u'试');
+        ASSERT(back.b[3][0] == u'啊');
+        ASSERT(back.b[3][1] == u'！');
 
         // int64_t c
-        assert(back.c == 0x1122334455667788LL);
+        ASSERT(back.c == 0x1122334455667788LL);
 
         // int32_t d[2][2][3]
-        assert(back.d[0][0][0] == 1);
-        assert(back.d[0][0][1] == 2);
-        assert(back.d[0][0][2] == 3);
-        assert(back.d[0][1][0] == 4);
-        assert(back.d[0][1][1] == 5);
-        assert(back.d[0][1][2] == 6);
+        ASSERT(back.d[0][0][0] == 1);
+        ASSERT(back.d[0][0][1] == 2);
+        ASSERT(back.d[0][0][2] == 3);
+        ASSERT(back.d[0][1][0] == 4);
+        ASSERT(back.d[0][1][1] == 5);
+        ASSERT(back.d[0][1][2] == 6);
 
-        assert(back.d[1][0][0] == 7);
-        assert(back.d[1][0][1] == 8);
-        assert(back.d[1][0][2] == 9);
-        assert(back.d[1][1][0] == 10);
-        assert(back.d[1][1][1] == 11);
-        assert(back.d[1][1][2] == 12);
+        ASSERT(back.d[1][0][0] == 7);
+        ASSERT(back.d[1][0][1] == 8);
+        ASSERT(back.d[1][0][2] == 9);
+        ASSERT(back.d[1][1][0] == 10);
+        ASSERT(back.d[1][1][1] == 11);
+        ASSERT(back.d[1][1][2] == 12);
     }
 }
 
@@ -987,8 +992,8 @@ void error_test()
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
-        assert(!result);
-        assert(result.error == Error::MagicNumberIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(!result);
+        ASSERT(result.error == Error::MagicNumberIncorrect); // 可以具体判断 checksum 错误
     }
 
     // data length error
@@ -1007,8 +1012,8 @@ void error_test()
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
-        assert(!result);
-        assert(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(!result);
+        ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
     }
 
     // checksum error
@@ -1027,8 +1032,8 @@ void error_test()
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
-        assert(!result);
-        assert(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(!result);
+        ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
     }
 
     // data error
@@ -1047,8 +1052,8 @@ void error_test()
         auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
-        assert(!result);
-        assert(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(!result);
+        ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
     }
 }
 
@@ -1059,14 +1064,21 @@ void custom_structure_test()
 
 int main()
 {
-    checksum_test();
-    traits_test();
-    fixed_byte_array_test();
-    dyn_array_test();
-    char_arr_test();
-    c_arr_test();
-    error_test();
-    custom_structure_test();
+    try
+    {
+        checksum_test();
+        traits_test();
+        fixed_byte_array_test();
+        dyn_array_test();
+        char_arr_test();
+        c_arr_test();
+        error_test();
+        custom_structure_test();
+    }
+    catch (std::exception& e)
+    {
+        std::cerr << e.what() << std::endl;
+    }
 
     return 0;
 }

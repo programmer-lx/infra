@@ -81,27 +81,6 @@ namespace infra::binary_serialization
         constexpr auto crc32_table = make_crc32_table();
     }
     
-    template <typename T>
-    concept is_1byte = requires
-    {
-        requires sizeof(T) == 1;
-        requires std::is_trivially_copyable_v<T>; // can memcpy
-    };
-    
-    template<is_1byte B>
-    checksum_t update_checksum(checksum_t origin, const B* data, size_t size) noexcept
-    {
-        origin = origin ^ 0xffffffff;
-
-        for (size_t i = 0; i < size; i++)
-        {
-            uint8_t index = (origin ^ std::bit_cast<uint8_t>(data[i])) & 0xff;
-            origin = (origin >> 8) ^ detail::crc32_table[index];
-        }
-
-        return origin ^ 0xffffffff;
-    }
-    
     template<typename T>
     concept is_serializable_integral =
         meta::is_any_type_of_v<std::remove_cvref_t<T>,
@@ -136,6 +115,23 @@ namespace infra::binary_serialization
         is_serializable_number<T>       ||
         is_serializable_char_value<T>   ||
         is_serializable_enum_value<T>;
+
+    template <typename T>
+    concept is_1byte = (sizeof(T) == 1) && is_value<T>;
+
+    template<is_1byte B>
+    checksum_t update_checksum(checksum_t origin, const B* data, size_t size) noexcept
+    {
+        origin = origin ^ 0xffffffff;
+
+        for (size_t i = 0; i < size; i++)
+        {
+            uint8_t index = (origin ^ std::bit_cast<uint8_t>(data[i])) & 0xff;
+            origin = (origin >> 8) ^ detail::crc32_table[index];
+        }
+
+        return origin ^ 0xffffffff;
+    }
     
     namespace detail
     {

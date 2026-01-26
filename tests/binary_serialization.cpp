@@ -4,10 +4,12 @@
 
 #include <array>
 #include <bit>
+#include <string>
 
 #include <infra/binary_serialization.hpp>
-#include <infra/extension/binary_serialization/byte_container_std_array.hpp>
-#include <infra/extension/binary_serialization/byte_container_std_vector.hpp>
+#include <infra/extension/binary_serialization/adaptor_std_array.hpp>
+#include <infra/extension/binary_serialization/adaptor_std_vector.hpp>
+#include <infra/extension/binary_serialization/structure_std_basic_string.hpp>
 
 struct Storage
 {
@@ -24,9 +26,9 @@ namespace infra::binary_serialization
         Storage& storage
     )
     {
-        reader.value(storage.a);
-        reader.value(storage.b);
-        reader.value(storage.c);
+        reader >> storage.a;
+        reader >> storage.b;
+        reader >> storage.c;
     }
 
     template<typename ByteContainer>
@@ -35,9 +37,9 @@ namespace infra::binary_serialization
         const Storage& storage
     )
     {
-        writer.value(storage.a);
-        writer.value(storage.b);
-        writer.value(storage.c);
+        writer << storage.a;
+        writer << storage.b;
+        writer << storage.c;
     }
 }
 
@@ -184,6 +186,33 @@ namespace infra::binary_serialization
 }
 
 
+struct Storage_CustomStruct
+{
+    std::string std_string;
+};
+
+namespace infra::binary_serialization
+{
+    template<typename ByteContainer>
+    void from_bytes(
+        Reader<ByteContainer>& reader,
+        Storage_CustomStruct& storage
+    )
+    {
+        reader.structure(storage.std_string);
+    }
+
+    template<typename ByteContainer>
+    void to_bytes(
+        Writer<ByteContainer>& writer,
+        const Storage_CustomStruct& storage
+    )
+    {
+        writer.structure(storage.std_string);
+    }
+}
+
+
 void checksum_test()
 {
     const char* s = "123456789";
@@ -206,6 +235,9 @@ void traits_test()
     static_assert(detail::is_c_array<double[5]>);
     static_assert(detail::is_c_array<int[3][4]>);
 
+    static_assert(detail::is_structure<Storage>);
+    static_assert(!detail::is_structure<int>);
+
     static_assert(sizeof(int[3][4])== sizeof(int) * 12);
 
     // 指针不行
@@ -222,7 +254,7 @@ void fixed_byte_array_test()
         Storage storage{0x0102030405060708ULL, 0x11223344, 0x55667788};
         std::array<uint8_t, 1024> buffer{};
 
-        infra::binary_serialization::serialize(buffer, storage);
+        infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, storage);
 
         // magic
         assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
@@ -268,7 +300,7 @@ void fixed_byte_array_test()
 
         // 反序列化测试
         Storage back = { 1000, 1000, 1000 };
-        [[maybe_unused]] [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
         assert(result);
         assert(result.error == Error::OK);
         assert(back.a == 0x0102030405060708ULL);
@@ -281,7 +313,7 @@ void fixed_byte_array_test()
         Storage2 storage{0x0102030405060708ULL, 0x11223344, 0x55667788};
         std::array<uint8_t, 22> buffer{}; // 12 + 8 + 2，只有a能被序列化
 
-        infra::binary_serialization::serialize(buffer, storage);
+        infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 22>>>(buffer, storage);
 
         // magic
         assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
@@ -327,7 +359,7 @@ void fixed_byte_array_test()
 
         // 反序列化测试
         Storage2 back = { 1000, 1000, 1000 };
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 22>>>(buffer, back);
         assert(result);
         assert(result.error == Error::OK);
         assert(back.a == 0x0102030405060708ULL);
@@ -345,7 +377,7 @@ void fixed_byte_array_test()
         };
 
         std::array<uint8_t, 1024> buffer{};
-        infra::binary_serialization::serialize(buffer, storage);
+        infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, storage);
 
         // magic
         assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
@@ -430,7 +462,7 @@ void fixed_byte_array_test()
             {1000,1000,1000}, 1000, 1000, 1000
         };
 
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
 
         assert(result);
         assert(result.error == Error::OK);
@@ -456,7 +488,7 @@ void fixed_byte_array_test()
         // 12 + [16 + 8 + 4] + 1     []代表实际data段
         std::array<uint8_t, 41> buffer{}; // c 不能参与序列化
 
-        [[maybe_unused]] auto serialize_result = infra::binary_serialization::serialize(buffer, storage);
+        [[maybe_unused]] auto serialize_result = infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 41>>>(buffer, storage);
 
         // ---- magic ----
         assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
@@ -537,7 +569,7 @@ void fixed_byte_array_test()
             {1000,1000,1000}, 1000, 1000, 1000
         };
 
-        [[maybe_unused]] [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 41>>>(buffer, back);
 
         assert(result);
         assert(result.error == Error::OK);
@@ -563,7 +595,7 @@ void dyn_array_test()
         Storage storage{0x0102030405060708ULL, 0x11223344, 0x55667788};
         std::vector<uint8_t> buffer{};
 
-        infra::binary_serialization::serialize(buffer, storage);
+        infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // magic
         assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
@@ -609,7 +641,7 @@ void dyn_array_test()
 
         // 反序列化测试
         Storage back = { 1000, 1000, 1000 };
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
         assert(result);
         assert(result.error == Error::OK);
         assert(back.a == 0x0102030405060708ULL);
@@ -627,7 +659,7 @@ void dyn_array_test()
         };
 
         std::vector<uint8_t> buffer{};
-        infra::binary_serialization::serialize(buffer, storage);
+        infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // magic
         assert(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
@@ -712,7 +744,7 @@ void dyn_array_test()
             {1000,1000,1000}, 1000, 1000, 1000
         };
 
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         assert(result);
         assert(result.error == Error::OK);
@@ -741,7 +773,7 @@ void char_arr_test()
         };
 
         std::vector<uint8_t> buffer{};
-        [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize(buffer, storage);
+        [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
         assert(ser_result);
         assert(ser_result.error == Error::OK);
 
@@ -814,7 +846,7 @@ void char_arr_test()
 
         // ---- deserialize test ----
         Storage_CharArr back{};
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         assert(result);
         assert(result.error == Error::OK);
@@ -855,7 +887,7 @@ void c_arr_test()
         };
 
         std::vector<std::byte> buffer{};
-        [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize(buffer, storage);
+        [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize<Adaptor<std::vector<std::byte>>>(buffer, storage);
         assert(ser_result);
         assert(ser_result.error == Error::OK);
 
@@ -889,7 +921,7 @@ void c_arr_test()
 
         // ---- deserialize test ----
         Storage_CArr back{};
-        [[maybe_unused]] auto result = infra::binary_serialization::deserialize(buffer, back);
+        [[maybe_unused]] auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<std::byte>>>(buffer, back);
         assert(result);
         assert(result.error == Error::OK);
 
@@ -945,14 +977,14 @@ void error_test()
         std::vector<uint8_t> buffer{};
 
         // 正常序列化
-        serialize(buffer, storage);
+        serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // 模拟文件损坏，修改 data 部分一个字节
         buffer[detail::MagicOffset + 1] ^= 0xFF;
 
         // 反序列化
         Storage back = { 1000, 1000, 1000 };
-        auto result = deserialize(buffer, back);
+        auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         assert(!result);
@@ -965,14 +997,14 @@ void error_test()
         std::vector<uint8_t> buffer{};
 
         // 正常序列化
-        serialize(buffer, storage);
+        serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // 模拟文件损坏，修改 data 部分一个字节
         buffer[detail::DataLengthOffset] -= 1;
 
         // 反序列化
         Storage back = { 1000, 1000, 1000 };
-        auto result = deserialize(buffer, back);
+        auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         assert(!result);
@@ -985,14 +1017,14 @@ void error_test()
         std::vector<uint8_t> buffer{};
 
         // 正常序列化
-        serialize(buffer, storage);
+        serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // 模拟文件损坏，修改 data 部分一个字节
         buffer[detail::ChecksumOffset + 1] ^= 0xFF;
 
         // 反序列化
         Storage back = { 1000, 1000, 1000 };
-        auto result = deserialize(buffer, back);
+        auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         assert(!result);
@@ -1005,14 +1037,14 @@ void error_test()
         std::vector<uint8_t> buffer{};
 
         // 正常序列化
-        serialize(buffer, storage);
+        serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // 模拟文件损坏，修改 data 部分一个字节
         buffer[detail::DataOffset + 5] ^= 0xFF;  // 反转第 6 个字节
 
         // 反序列化
         Storage back = { 1000, 1000, 1000 };
-        auto result = deserialize(buffer, back);
+        auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         // 断言反序列化失败
         assert(!result);

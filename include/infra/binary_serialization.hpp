@@ -146,8 +146,17 @@ namespace infra::binary_serialization
     template<typename ByteContainer>
     class Writer;
 
-    template<typename FixedByteArray>
+    template<typename ByteContainer>
     class Reader;
+
+    // 需要实现接口:
+    // static           size_t       size(const ByteContainer& container)
+    // static           ByteType*    data(ByteContainer& container)
+    // static           void         resize(ByteContainer& vec, size_t new_size)
+    // static           void         push_back(ByteContainer& vec, const ByteType& val)
+    // static constexpr bool         resizeable()
+    template<typename ByteContainer>
+    struct Adaptor;
 
     template<typename ByteContainer, typename Object>
     void to_bytes(Writer<ByteContainer>& writer, const Object& object);
@@ -155,124 +164,232 @@ namespace infra::binary_serialization
     template<typename ByteContainer, typename Object>
     void from_bytes(Reader<ByteContainer>& reader, Object& object);
 
-    namespace detail
+    template<typename ByteContainer>
+    class Writer
     {
-        template<typename Impl>
-        class WriterBase
+    private:
+        ByteContainer& m_arr;
+        size_t m_pos;
+        checksum_t m_checksum = InitialChecksum;
+
+        template<detail::is_1byte B>
+        void update_checksum(const B* data, size_t size)
         {
-        public:
-            void move_forward(size_t size) noexcept
-            {
-                static_cast<Impl*>(this)->move_forward(size);
-            }
-
-            void jump(size_t offset) noexcept
-            {
-                static_cast<Impl*>(this)->jump(offset);
-            }
-
-            size_t current_offset() const noexcept
-            {
-                return static_cast<Impl*>(this)->current_offset();
-            }
-
-            checksum_t checksum() const noexcept
-            {
-                return static_cast<Impl*>(this)->checksum();;
-            }
-
-            template<detail::is_value T>
-            void value(const T& v) noexcept
-            {
-                static_cast<Impl*>(this)->value(v);
-            }
-
-            template<detail::is_structure T>
-            void structure(const T& s) noexcept
-            {
-                to_bytes(*static_cast<Impl*>(this), s);
-            }
-
-            template<detail::is_c_array T>
-            void c_array(const T& arr) noexcept
-            {
-                for (size_t i = 0; i < std::extent_v<T>; ++i)
-                {
-                    const auto& elem = arr[i];
-                    using elem_t = std::remove_reference_t<decltype(elem)>;
-
-                    if constexpr (detail::is_value<elem_t>)
-                    {
-                        value(elem);
-                    }
-                    else if constexpr (detail::is_c_array<elem_t>)
-                    {
-                        c_array(elem);
-                    }
-                    else
-                    {
-                        structure(elem);
-                    }
-                }
-            }
-        };
-
-        template<typename Impl>
-        class ReaderBase
-        {
-        public:
-            template<detail::is_value T>
-            void value(T& v) noexcept
-            {
-                static_cast<Impl*>(this)->value(v);
-            }
-
-            template<detail::is_structure T>
-            void structure(T& v) noexcept
-            {
-                from_bytes(*static_cast<Impl*>(this), v);
-            }
-
-            template<detail::is_c_array T>
-            void c_array(T& arr) noexcept
-            {
-                for (size_t i = 0; i < std::extent_v<T>; ++i)
-                {
-                    auto& elem = arr[i];
-                    using elem_t = std::remove_reference_t<decltype(elem)>;
-
-                    if constexpr (detail::is_value<elem_t>)
-                    {
-                        value(elem);
-                    }
-                    else if constexpr (detail::is_c_array<elem_t>)
-                    {
-                        c_array(elem);
-                    }
-                    else
-                    {
-                        structure(elem);
-                    }
-                }
-            }
-        };
-
-        template<typename ByteContainer>
-        requires detail::has_resize<ByteContainer>
-        void resize_if_it_has(ByteContainer& arr, size_t new_size)
-        {
-            arr.resize(new_size, static_cast<ByteContainer::value_type>(0));
+            m_checksum = detail::update_checksum(m_checksum, data, size);
         }
 
-        template<typename ByteContainer>
-            requires (!detail::has_resize<ByteContainer>)
-        void resize_if_it_has(ByteContainer& arr, size_t new_size)
+        void auto_resize(size_t new_size) noexcept
         {
-            (void)arr;
-            (void)new_size;
-            // do nothing
+            using adaptor_t = Adaptor<ByteContainer>;
+
+            if constexpr (adaptor_t::resizeable())
+            {
+                while (m_pos + new_size >= adaptor_t::size(m_arr))
+                {
+                    adaptor_t::push_back(m_arr, std::bit_cast<typename adaptor_t::byte_type>(static_cast<uint8_t>(0)));
+                }
+            }
         }
-    }
+
+        template<size_t Bytes>
+        void value_impl(const void* src) noexcept
+        {
+            using adaptor_t = Adaptor<ByteContainer>;
+
+            if constexpr (!adaptor_t::resizeable())
+            {
+                if (m_pos + Bytes >= m_arr.size())
+                {
+                    return;
+                }
+            }
+
+            if constexpr (endian::Current == endian::Endian::Big)
+            {
+                uint8_t src_copy[Bytes] = {};
+                memmove(src_copy, src, Bytes);
+                endian::to_little(src_copy, Bytes);
+
+                auto_resize(Bytes);
+                memmove(m_arr.data() + m_pos, src_copy, Bytes);
+
+                update_checksum(src_copy, Bytes);
+            }
+            else
+            {
+                auto_resize(Bytes);
+                memmove(m_arr.data() + m_pos, src, Bytes);
+
+                update_checksum(static_cast<const uint8_t*>(src), Bytes);
+            }
+
+            jump(m_pos + Bytes);
+        }
+
+    public:
+        Writer(ByteContainer& arr, size_t pos)
+            : m_arr(arr), m_pos(pos)
+        {
+        }
+
+        void jump(size_t offset) noexcept
+        {
+            m_pos = offset;
+        }
+
+        size_t current_offset() const noexcept
+        {
+            return m_pos;
+        }
+
+        checksum_t checksum() const noexcept
+        {
+            return m_checksum;
+        }
+
+        template<detail::is_value T>
+        void value(const T& v) noexcept
+        {
+            value_impl<sizeof(T)>(&v);
+        }
+
+        template<detail::is_structure T>
+        void structure(const T& s) noexcept
+        {
+            to_bytes(*this, s);
+        }
+
+        template<detail::is_c_array T>
+        void c_array(const T& arr) noexcept
+        {
+            for (size_t i = 0; i < std::extent_v<T>; ++i)
+            {
+                const auto& elem = arr[i];
+                using elem_t = std::remove_reference_t<decltype(elem)>;
+
+                if constexpr (detail::is_value<elem_t>)
+                {
+                    value(elem);
+                }
+                else if constexpr (detail::is_c_array<elem_t>)
+                {
+                    c_array(elem);
+                }
+                else
+                {
+                    structure(elem);
+                }
+            }
+        }
+
+        template<typename T>
+        void operator<<(const T& var) noexcept
+        {
+            if constexpr (detail::is_value<T>)
+            {
+                value(var);
+            }
+            else if constexpr (detail::is_structure<T>)
+            {
+                structure(var);
+            }
+            else if constexpr (detail::is_c_array<T>)
+            {
+                c_array(var);
+            }
+        }
+    };
+
+    template<typename ByteContainer>
+    class Reader
+    {
+    private:
+        const ByteContainer& m_arr;
+        size_t m_pos;
+
+    private:
+        template<size_t Bytes>
+        void value_impl(void* dst) noexcept
+        {
+            if (m_pos + Bytes >= m_arr.size())
+            {
+                return;
+            }
+
+            if constexpr (endian::Current == endian::Endian::Big)
+            {
+                uint8_t src_copy[Bytes] = {};
+                memcpy(src_copy, m_arr.data() + m_pos, Bytes);
+                endian::to_little(src_copy, Bytes);
+
+                memcpy(dst, src_copy, Bytes);
+            }
+            else
+            {
+                memcpy(dst, m_arr.data() + m_pos, Bytes);
+            }
+
+            m_pos += Bytes;
+        }
+
+    public:
+        Reader(const ByteContainer& arr, size_t pos)
+            : m_arr(arr), m_pos(pos)
+        {
+        }
+
+        template<detail::is_value T>
+        void value(T& v) noexcept
+        {
+            value_impl<sizeof(T)>(&v);
+        }
+
+        template<detail::is_structure T>
+        void structure(T& v) noexcept
+        {
+            from_bytes(*this, v);
+        }
+
+        template<detail::is_c_array T>
+        void c_array(T& arr) noexcept
+        {
+            for (size_t i = 0; i < std::extent_v<T>; ++i)
+            {
+                auto& elem = arr[i];
+                using elem_t = std::remove_reference_t<decltype(elem)>;
+
+                if constexpr (detail::is_value<elem_t>)
+                {
+                    value(elem);
+                }
+                else if constexpr (detail::is_c_array<elem_t>)
+                {
+                    c_array(elem);
+                }
+                else
+                {
+                    structure(elem);
+                }
+            }
+        }
+
+        template<typename T>
+        void operator>>(T& var) noexcept
+        {
+            if constexpr (detail::is_value<T>)
+            {
+                value(var);
+            }
+            else if constexpr (detail::is_structure<T>)
+            {
+                structure(var);
+            }
+            else if constexpr (detail::is_c_array<T>)
+            {
+                c_array(var);
+            }
+        }
+    };
 
     enum class Error
     {
@@ -292,30 +409,28 @@ namespace infra::binary_serialization
         }
     };
 
-    template<typename ByteContainer, typename Object>
+    template<typename SerializationDescriptor, typename ByteContainer, typename Object>
     Result serialize(ByteContainer& byte_array, const Object& object)
     {
         Result result{};
 
-        detail::resize_if_it_has(byte_array, detail::DataOffset);
-        if (byte_array.size() < detail::DataOffset)
+        SerializationDescriptor::resize(byte_array, detail::DataOffset);
+        if (SerializationDescriptor::size(byte_array) < detail::DataOffset)
         {
             result.error = Error::BufferSizeTooSmall;
             return result;
         }
 
-        Writer<ByteContainer> writer(byte_array, 0);
+        typename SerializationDescriptor::writer_type writer(byte_array, 0);
 
         // save magic
         writer.c_array(detail::MagicValue);
 
         // data length (写完数据后再填充)
-        writer.move_forward(detail::DataLengthSize);
-
         // checksum (写完数据后再填充)
-        writer.move_forward(detail::ChecksumSize);
 
         // data
+        writer.jump(detail::DataOffset);
         to_bytes(writer, object);
 
 
@@ -332,18 +447,18 @@ namespace infra::binary_serialization
         return result;
     }
 
-    template<typename ByteContainer, typename Object>
+    template<typename SerializationDescriptor, typename ByteContainer, typename Object>
     Result deserialize(const ByteContainer& byte_array, Object& object)
     {
         Result result{};
 
-        if (byte_array.size() <= detail::DataOffset)
+        if (SerializationDescriptor::size(byte_array) <= detail::DataOffset)
         {
             result.error = Error::BufferSizeTooSmall;
             return result;
         }
 
-        Reader<ByteContainer> reader(byte_array, 0);
+        typename SerializationDescriptor::reader_type reader(byte_array, 0);
 
         // magic
         decltype(std::declval<detail::Header>().magic) magic;
@@ -361,10 +476,11 @@ namespace infra::binary_serialization
         // checksum
         decltype(std::declval<detail::Header>().checksum) checksum;
         reader.value(checksum);
+        auto& ref_arr = const_cast<ByteContainer&>(byte_array);
         checksum_t test_checksum = InitialChecksum;
-        test_checksum = detail::update_checksum(test_checksum, byte_array.data() + detail::MagicOffset, detail::MagicSize);
-        test_checksum = detail::update_checksum(test_checksum, byte_array.data() + detail::DataOffset, data_length);
-        test_checksum = detail::update_checksum(test_checksum, byte_array.data() + detail::DataLengthOffset, detail::DataLengthSize);
+        test_checksum = detail::update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::MagicOffset, detail::MagicSize);
+        test_checksum = detail::update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataOffset, data_length);
+        test_checksum = detail::update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataLengthOffset, detail::DataLengthSize);
         if (test_checksum != checksum)
         {
             result.error = Error::ChecksumIncorrect;
@@ -372,7 +488,6 @@ namespace infra::binary_serialization
         }
 
         // data
-        detail::resize_if_it_has(byte_array, detail::DataOffset + data_length);
         from_bytes(reader, object);
 
         return result;

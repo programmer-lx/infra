@@ -328,7 +328,7 @@ namespace infra::binary_serialization
         }
 
         template<is_value T>
-        void value(const T& v) noexcept
+        void value(const T v) noexcept
         {
             value_impl<sizeof(T)>(&v);
         }

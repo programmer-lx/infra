@@ -1477,6 +1477,7 @@ struct Storage_Bool
     bool b1;
     uint32_t c;
     bool b2;
+    bool b3[3][2];
 };
 
 namespace infra::binary_serialization
@@ -1491,6 +1492,7 @@ namespace infra::binary_serialization
         reader >> storage.b1;
         reader >> storage.c;
         reader >> storage.b2;
+        reader >> storage.b3;
     }
 
     template<typename ByteContainer>
@@ -1503,6 +1505,7 @@ namespace infra::binary_serialization
         writer << storage.b1;
         writer << storage.c;
         writer << storage.b2;
+        writer << storage.b3;
     }
 }
 
@@ -1511,9 +1514,15 @@ void bool_test()
     using namespace infra::binary_serialization;
 
     {
-        Storage_Bool storage{ 0x0102030405060708ULL, true, 0x11223344, false };
-        std::vector<uint8_t> buffer{};
+        Storage_Bool storage{
+            0x0102030405060708ULL,
+            true,
+            0x11223344,
+            false,
+            { {true, false}, {false, true}, {true, true} } // b3
+        };
 
+        std::vector<uint8_t> buffer{};
         infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // magic
@@ -1524,12 +1533,13 @@ void bool_test()
 
         // checksum
         crc32c_t checksum = update_crc32c_checksum(Initial_CRC32C, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataOffset], 14);
+        // 数据长度 = 14 原来的 + 6 (b3 3*2 bytes)
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataOffset], 14 + 6);
         checksum = update_crc32c_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
         ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
-        // data length = 14 bytes (0x0E)
-        ASSERT(buffer[detail::DataLengthOffset + 0] == 0x0E);
+        // data length = 20 bytes (0x14)
+        ASSERT(buffer[detail::DataLengthOffset + 0] == 0x14);
         ASSERT(buffer[detail::DataLengthOffset + 1] == 0x00);
         ASSERT(buffer[detail::DataLengthOffset + 2] == 0x00);
         ASSERT(buffer[detail::DataLengthOffset + 3] == 0x00);
@@ -1558,11 +1568,19 @@ void bool_test()
         // bool b2 = false
         ASSERT(buffer[detail::DataOffset + 13] == 0x00);
 
+        // bool b3[3][2] = {{1,0},{0,1},{1,1}}
+        ASSERT(buffer[detail::DataOffset + 14] == 0x01);
+        ASSERT(buffer[detail::DataOffset + 15] == 0x00);
+        ASSERT(buffer[detail::DataOffset + 16] == 0x00);
+        ASSERT(buffer[detail::DataOffset + 17] == 0x01);
+        ASSERT(buffer[detail::DataOffset + 18] == 0x01);
+        ASSERT(buffer[detail::DataOffset + 19] == 0x01);
+
         // sizeof 检查
         ASSERT(sizeof(Storage_Bool) <= buffer.size());
 
         // 反序列化测试
-        Storage_Bool back{ 0, false, 0, true };
+        Storage_Bool back{ 0, false, 0, true, {} };
         auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         ASSERT(result);
@@ -1573,19 +1591,12 @@ void bool_test()
         ASSERT(back.c  == 0x11223344);
         ASSERT(back.b2 == false);
 
-
-        // 模拟文件损坏 TODO 找到一种可以破坏掉里面的bool字节的方法，但是保持checksum不变
-        // Storage_Bool back_error{ 50, false, 51, true };
-        // buffer[detail::DataOffset + 8] = 2; // bool 的值只能是0或1，如果是其他值，则当作是反序列化错误
-        // result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
-        // ASSERT(!result);
-        // ASSERT(result.error != Error::OK);
-        //
-        // // b1被破坏了，但是a是可以正常反序列化的
-        // ASSERT(back_error.a  == 0x0102030405060708ULL);
-        // ASSERT(back_error.b1 == false);
-        // ASSERT(back_error.c  == 51);
-        // ASSERT(back_error.b2 == true);
+        ASSERT(back.b3[0][0] == true);
+        ASSERT(back.b3[0][1] == false);
+        ASSERT(back.b3[1][0] == false);
+        ASSERT(back.b3[1][1] == true);
+        ASSERT(back.b3[2][0] == true);
+        ASSERT(back.b3[2][1] == true);
     }
 }
 

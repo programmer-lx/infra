@@ -205,13 +205,13 @@ namespace infra::binary_serialization
         template<typename T, std::size_t N>
         struct is_c_arr_impl<T[N]>
         {
-            static constexpr bool value = is_c_arr_impl<T>::value || is_value<T>;
+            static constexpr bool value = is_c_arr_impl<T>::value || is_value<T> || is_bool<T>;
         };
     }
     
     // N维C数组
     template<typename T>
-    concept is_c_array = detail::is_c_arr_impl<std::remove_cv_t<T>>::value;
+    concept is_c_array = std::is_array_v<std::remove_cv_t<T>> && detail::is_c_arr_impl<std::remove_cv_t<T>>::value;
 
     template<typename T>
     concept is_structure = std::is_class_v<std::remove_cv_t<T>>;
@@ -347,7 +347,11 @@ namespace infra::binary_serialization
                 const auto& elem = arr[i];
                 using elem_t = std::remove_cvref_t<decltype(elem)>;
 
-                if constexpr (is_value<elem_t>)
+                if constexpr (is_bool<elem_t>)
+                {
+                    bool_value(elem);
+                }
+                else if constexpr (is_value<elem_t>)
                 {
                     value(elem);
                 }
@@ -498,7 +502,11 @@ namespace infra::binary_serialization
                 auto& elem = arr[i];
                 using elem_t = std::remove_cvref_t<decltype(elem)>;
 
-                if constexpr (is_value<elem_t>)
+                if constexpr (is_bool<elem_t>)
+                {
+                    bool_value(elem);
+                }
+                else if constexpr (is_value<elem_t>)
                 {
                     value(elem);
                 }

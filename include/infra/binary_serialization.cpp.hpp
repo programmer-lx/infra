@@ -176,7 +176,7 @@ namespace infra::binary_serialization
 
             if constexpr (adaptor_t::resizeable())
             {
-                while (m_pos + new_size >= adaptor_t::size(m_arr))
+                while (m_pos + new_size > adaptor_t::size(m_arr))
                 {
                     adaptor_t::push_back(m_arr, std::bit_cast<typename adaptor_t::byte_type>(static_cast<uint8_t>(0)));
                 }
@@ -190,7 +190,7 @@ namespace infra::binary_serialization
 
             if constexpr (!adaptor_t::resizeable())
             {
-                if (m_pos + Bytes >= adaptor_t::size(m_arr))
+                if (m_pos + Bytes > adaptor_t::size(m_arr))
                 {
                     return;
                 }
@@ -325,7 +325,7 @@ namespace infra::binary_serialization
         {
             using adaptor_t = Adaptor<ByteContainer>;
             
-            if (m_pos + Bytes >= adaptor_t::size(m_arr))
+            if (m_pos + Bytes > adaptor_t::size(m_arr))
             {
                 return;
             }
@@ -446,7 +446,6 @@ namespace infra::binary_serialization
     {
         OK = 0,
         BufferSizeTooSmall,
-        DataLengthIsZero,
         MagicNumberIncorrect,
         ChecksumIncorrect,
     };
@@ -461,19 +460,19 @@ namespace infra::binary_serialization
         }
     };
 
-    template<typename SerializationDescriptor, typename ByteContainer, typename Object>
+    template<typename ContainerAdaptor, typename ByteContainer, typename Object>
     Result serialize(ByteContainer& byte_array, const Object& object)
     {
         Result result{};
 
-        SerializationDescriptor::resize(byte_array, detail::DataOffset);
-        if (SerializationDescriptor::size(byte_array) < detail::DataOffset)
+        ContainerAdaptor::resize(byte_array, detail::DataOffset);
+        if (ContainerAdaptor::size(byte_array) < detail::DataOffset)
         {
             result.error = Error::BufferSizeTooSmall;
             return result;
         }
 
-        typename SerializationDescriptor::writer_type writer(byte_array);
+        typename ContainerAdaptor::writer_type writer(byte_array);
 
         // save magic
         writer << detail::MagicValue;
@@ -501,18 +500,18 @@ namespace infra::binary_serialization
         return result;
     }
 
-    template<typename SerializationDescriptor, typename ByteContainer, typename Object>
+    template<typename ContainerAdaptor, typename ByteContainer, typename Object>
     Result deserialize(const ByteContainer& byte_array, Object& object)
     {
         Result result{};
 
-        if (SerializationDescriptor::size(byte_array) <= detail::DataOffset)
+        if (ContainerAdaptor::size(byte_array) <= detail::DataOffset)
         {
             result.error = Error::BufferSizeTooSmall;
             return result;
         }
 
-        typename SerializationDescriptor::reader_type reader(byte_array);
+        typename ContainerAdaptor::reader_type reader(byte_array);
 
         // magic
         decltype(std::declval<detail::Header>().magic) magic = {};
@@ -526,9 +525,11 @@ namespace infra::binary_serialization
         // data length
         decltype(std::declval<detail::Header>().data_length) data_length = 0;
         reader >> data_length;
-        if (data_length == 0)
+
+        // byte_array的容量一定要比文件大
+        if (ContainerAdaptor::size(byte_array) < data_length + detail::DataOffset)
         {
-            result.error = Error::DataLengthIsZero;
+            result.error = Error::BufferSizeTooSmall;
             return result;
         }
 

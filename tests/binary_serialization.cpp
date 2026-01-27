@@ -1371,9 +1371,10 @@ void error_test()
 
         // 正常序列化
         serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
+        ASSERT(buffer.size() == detail::DataOffset + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint32_t));
 
         // 模拟文件损坏，修改 data 部分一个字节
-        *reinterpret_cast<data_length_t*>(&buffer[detail::DataLengthOffset]) = 0;
+        *reinterpret_cast<data_length_t*>(&buffer[detail::DataLengthOffset]) += 1;
 
         // 反序列化
         Storage back = { 1000, 1001, 1002 };
@@ -1381,7 +1382,7 @@ void error_test()
 
         // 断言反序列化失败
         ASSERT(!result);
-        ASSERT(result.error == Error::DataLengthIsZero); // 可以具体判断 checksum 错误
+        ASSERT(result.error == Error::BufferSizeTooSmall); // 可以具体判断 checksum 错误
 
         ASSERT(back.a == 1000);
         ASSERT(back.b == 1001);

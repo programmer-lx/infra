@@ -170,9 +170,8 @@ namespace infra::binary_serialization
         size_t m_pos;
         crc32c_t m_crc32c_checksum = Initial_CRC32C;
 
-        // size_t m_crc32c_pos; // CRC32C的起始计算偏移量
-        // size_t m_crc32c_bytes = 0; // 不需要每一次序列化value的时候，都计算一次CRC32C，等到字节数累计达到64B的时候，再进行计算即可
-        // static constexpr size_t Desired_CRC32C_Bytes = 64;
+        size_t m_crc32c_bytes = 0; // 不需要每一次序列化value的时候，都计算一次CRC32C，等到字节数累计达到64B的时候，再进行计算即可
+        static constexpr size_t Desired_CRC32C_Bytes = 64;
 
         void auto_resize(size_t new_size) noexcept
         {
@@ -187,20 +186,21 @@ namespace infra::binary_serialization
             }
         }
 
-        // void force_calculate_crc32c() noexcept
-        // {
-        //     using adaptor_t = Adaptor<ByteContainer>;
-        //
-        //     m_crc32c_checksum = update_crc32c_checksum(
-        //         m_crc32c_checksum,
-        //         std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_crc32c_pos,
-        //         m_crc32c_bytes
-        //     );
-        //
-        //     m_crc32c_bytes = 0;
-        //     m_crc32c_pos = m_pos;
-        // }
+    public:
+        void force_calculate_crc32c_before_jump() noexcept
+        {
+            using adaptor_t = Adaptor<ByteContainer>;
 
+            m_crc32c_checksum = update_crc32c_checksum(
+                m_crc32c_checksum,
+                std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
+                m_crc32c_bytes
+            );
+
+            m_crc32c_bytes = 0;
+        }
+
+    private:
         template<size_t Bytes>
         void value_impl(const void* src) noexcept
         {
@@ -239,31 +239,15 @@ namespace infra::binary_serialization
                 );
             }
 
+            // m_crc32c_bytes += Bytes;
+            // if (m_crc32c_bytes >= Desired_CRC32C_Bytes)
+            // {
+            //     force_calculate_crc32c_before_jump();
+            // }
             jump(m_pos + Bytes);
         }
 
-    public:
-        Writer(ByteContainer& arr, size_t pos)
-            : m_arr(arr), m_pos(pos)
-        {
-        }
-
-        void jump(size_t offset) noexcept
-        {
-            m_pos = offset;
-        }
-
-        [[nodiscard]] size_t current_offset() const noexcept
-        {
-            return m_pos;
-        }
-
-        [[nodiscard]] crc32c_t checksum() const noexcept
-        {
-            return m_crc32c_checksum;
-        }
-
-        void bool_value(const bool& b) noexcept
+        void bool_value(const bool b) noexcept
         {
             const uint8_t v = b ? 1 : 0;
             value_impl<sizeof(uint8_t)>(&v);
@@ -302,6 +286,27 @@ namespace infra::binary_serialization
                     structure(elem);
                 }
             }
+        }
+
+    public:
+        Writer(ByteContainer& arr, size_t pos)
+            : m_arr(arr), m_pos(pos)
+        {
+        }
+
+        void jump(size_t offset) noexcept
+        {
+            m_pos = offset;
+        }
+
+        [[nodiscard]] size_t current_offset() const noexcept
+        {
+            return m_pos;
+        }
+
+        [[nodiscard]] crc32c_t checksum() const noexcept
+        {
+            return m_crc32c_checksum;
         }
 
         template<typename T>
@@ -362,12 +367,6 @@ namespace infra::binary_serialization
             m_pos += Bytes;
         }
 
-    public:
-        Reader(const ByteContainer& arr, size_t pos)
-            : m_arr(arr), m_pos(pos)
-        {
-        }
-
         void bool_value(bool& b) noexcept
         {
             uint8_t v = 0xff; // invalid value: v != 0 && v != 1
@@ -416,6 +415,12 @@ namespace infra::binary_serialization
                     structure(elem);
                 }
             }
+        }
+
+    public:
+        Reader(const ByteContainer& arr, size_t pos)
+            : m_arr(arr), m_pos(pos)
+        {
         }
 
         template<typename T>
@@ -475,7 +480,7 @@ namespace infra::binary_serialization
         typename SerializationDescriptor::writer_type writer(byte_array, 0);
 
         // save magic
-        writer.c_array(detail::MagicValue);
+        writer << detail::MagicValue;
 
         // data length (写完数据后再填充)
         // checksum (写完数据后再填充)
@@ -487,12 +492,12 @@ namespace infra::binary_serialization
         // data length
         const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
         writer.jump(detail::DataLengthOffset);
-        writer.value(data_length);
+        writer << data_length;
 
         // checksum
         const crc32c_t checksum = writer.checksum();
         writer.jump(detail::ChecksumOffset);
-        writer.value(checksum);
+        writer << checksum;
 
         return result;
     }
@@ -512,7 +517,7 @@ namespace infra::binary_serialization
 
         // magic
         decltype(std::declval<detail::Header>().magic) magic;
-        reader.c_array(magic);
+        reader >> magic;
         if (memcmp(magic, detail::MagicValue, detail::MagicSize) != 0)
         {
             result.error = Error::MagicNumberIncorrect;
@@ -521,11 +526,11 @@ namespace infra::binary_serialization
 
         // data length
         decltype(std::declval<detail::Header>().data_length) data_length;
-        reader.value(data_length);
+        reader >> data_length;
 
         // checksum
         decltype(std::declval<detail::Header>().checksum) checksum;
-        reader.value(checksum);
+        reader >> checksum;
         crc32c_t test_checksum = Initial_CRC32C;
         test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::MagicOffset, detail::MagicSize);
         test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataOffset, data_length);

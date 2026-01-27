@@ -459,9 +459,9 @@ namespace infra::binary_serialization
         Storage2& storage
     )
     {
-        reader.value(storage.a);
-        reader.value(storage.b);
-        reader.value(storage.c);
+        reader >> (storage.a);
+        reader >> (storage.b);
+        reader >> (storage.c);
     }
 
     template<typename ByteContainer>
@@ -470,9 +470,9 @@ namespace infra::binary_serialization
         const Storage2& storage
     )
     {
-        writer.value(storage.a);
-        writer.value(storage.b);
-        writer.value(storage.c);
+        writer <<(storage.a);
+        writer <<(storage.b);
+        writer <<(storage.c);
     }
 }
 
@@ -517,10 +517,10 @@ namespace infra::binary_serialization
         Storage_Structure& storage
     )
     {
-        reader.structure(storage.s);
-        reader.value(storage.a);
-        reader.value(storage.b);
-        reader.value(storage.c);
+        reader >> (storage.s);
+        reader >> (storage.a);
+        reader >> (storage.b);
+        reader >> (storage.c);
     }
 
     template<typename ByteContainer>
@@ -529,10 +529,10 @@ namespace infra::binary_serialization
         const Storage_Structure& storage
     )
     {
-        writer.structure(storage.s);
-        writer.value(storage.a);
-        writer.value(storage.b);
-        writer.value(storage.c);
+        writer << (storage.s);
+        writer <<(storage.a);
+        writer <<(storage.b);
+        writer <<(storage.c);
     }
 }
 
@@ -1069,11 +1069,11 @@ namespace infra::binary_serialization
         Storage_CharArr& storage
     )
     {
-        reader.c_array(storage.a);
-        reader.c_array(storage.b);
-        reader.c_array(storage.c);
-        reader.c_array(storage.d);
-        // reader.c_array(storage.e);
+        reader >> (storage.a);
+        reader >> (storage.b);
+        reader >> (storage.c);
+        reader >> (storage.d);
+        // reader >> (storage.e);
     }
 
     template<typename ByteContainer>
@@ -1082,11 +1082,11 @@ namespace infra::binary_serialization
         const Storage_CharArr& storage
     )
     {
-        writer.c_array(storage.a);
-        writer.c_array(storage.b);
-        writer.c_array(storage.c);
-        writer.c_array(storage.d);
-        // writer.c_array(storage.e);
+        writer << (storage.a);
+        writer << (storage.b);
+        writer << (storage.c);
+        writer << (storage.d);
+        // writer << (storage.e);
     }
 }
 
@@ -1222,10 +1222,10 @@ namespace infra::binary_serialization
         Storage_CArr& storage
     )
     {
-        reader.c_array(storage.a);
-        reader.c_array(storage.b);
-        reader.value(storage.c);
-        reader.c_array(storage.d);
+        reader >> (storage.a);
+        reader >> (storage.b);
+        reader >> (storage.c);
+        reader >> (storage.d);
     }
 
     template<typename ByteContainer>
@@ -1234,10 +1234,10 @@ namespace infra::binary_serialization
         const Storage_CArr& storage
     )
     {
-        writer.c_array(storage.a);
-        writer.c_array(storage.b);
-        writer.value(storage.c);
-        writer.c_array(storage.d);
+        writer << (storage.a);
+        writer << (storage.b);
+        writer << (storage.c);
+        writer << (storage.d);
     }
 }
 

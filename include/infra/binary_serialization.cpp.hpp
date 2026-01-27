@@ -204,21 +204,21 @@ namespace infra::binary_serialization
 
                 auto_resize(Bytes);
                 memcpy(adaptor_t::data(m_arr) + m_pos, src_copy, Bytes);
-                m_crc32c_checksum = update_crc32c_checksum(
-                    m_crc32c_checksum,
-                    std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
-                    Bytes
-                );
+                // m_crc32c_checksum = update_crc32c_checksum(
+                //     m_crc32c_checksum,
+                //     std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
+                //     Bytes
+                // );
             }
             else
             {
                 auto_resize(Bytes);
                 memcpy(adaptor_t::data(m_arr) + m_pos, src, Bytes);
-                m_crc32c_checksum = update_crc32c_checksum(
-                    m_crc32c_checksum,
-                    std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
-                    Bytes
-                );
+                // m_crc32c_checksum = update_crc32c_checksum(
+                //     m_crc32c_checksum,
+                //     std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
+                //     Bytes
+                // );
             }
 
             jump(m_pos + Bytes);
@@ -271,6 +271,17 @@ namespace infra::binary_serialization
         {
         }
 
+        void update_checksum(size_t offset, size_t size) noexcept
+        {
+            using adaptor_t = Adaptor<ByteContainer>;
+
+            m_crc32c_checksum = update_crc32c_checksum(
+                m_crc32c_checksum,
+                std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + offset,
+                size
+            );
+        }
+
         void jump(size_t offset) noexcept
         {
             m_pos = offset;
@@ -316,6 +327,7 @@ namespace infra::binary_serialization
     private:
         const ByteContainer& m_arr;
         size_t m_pos = 0;
+        crc32c_t m_checksum = Initial_CRC32C;
 
     private:
         template<size_t Bytes>
@@ -400,6 +412,22 @@ namespace infra::binary_serialization
         {
         }
 
+        void update_checksum(size_t offset, size_t size) noexcept
+        {
+            using adaptor_t = Adaptor<ByteContainer>;
+
+            m_checksum = update_crc32c_checksum(
+                m_checksum,
+                std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + offset,
+                size
+            );
+        }
+
+        [[nodiscard]] crc32c_t checksum() const noexcept
+        {
+            return m_checksum;
+        }
+
         template<typename T>
         void operator>>(T& var) noexcept
         {
@@ -458,6 +486,7 @@ namespace infra::binary_serialization
 
         // save magic
         writer << detail::MagicValue;
+        writer.update_checksum(detail::MagicOffset, detail::MagicSize);
 
         // data length (写完数据后再填充)
         // checksum (写完数据后再填充)
@@ -466,10 +495,12 @@ namespace infra::binary_serialization
         writer.jump(detail::DataOffset);
         to_bytes(writer, object);
         const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
+        writer.update_checksum(detail::DataOffset, static_cast<size_t>(data_length));
 
         // data length
         writer.jump(detail::DataLengthOffset);
         writer << data_length;
+        writer.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
 
         // checksum
         const crc32c_t checksum = writer.checksum();
@@ -508,11 +539,11 @@ namespace infra::binary_serialization
         // checksum
         decltype(std::declval<detail::Header>().checksum) checksum;
         reader >> checksum;
-        crc32c_t test_checksum = Initial_CRC32C;
-        test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::MagicOffset, detail::MagicSize);
-        test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataOffset, data_length);
-        test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataLengthOffset, detail::DataLengthSize);
-        if (test_checksum != checksum)
+
+        reader.update_checksum(detail::MagicOffset, detail::MagicSize);
+        reader.update_checksum(detail::DataOffset, data_length);
+        reader.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
+        if (reader.checksum() != checksum)
         {
             result.error = Error::ChecksumIncorrect;
             return result;

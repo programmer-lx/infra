@@ -1,5 +1,7 @@
 #pragma once
 
+// you should define INFRA_CPU_IMPL before include this file to enable the cpp part
+
 // hpp
 #pragma region HPP
 

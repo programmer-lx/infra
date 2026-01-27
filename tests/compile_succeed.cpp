@@ -16,6 +16,7 @@
 
 #include <infra/encoding.hpp>
 
+#define INFRA_BINARY_SERIALIZATION_IMPL
 #include <infra/binary_serialization.cpp.hpp>
 
 #include <infra/endian.hpp>
@@ -25,9 +26,12 @@
 #define INFRA_OS_IMPL
 #include <infra/os.cpp.hpp>
 
+#define INFRA_PROCESS_IMPL
+#include <infra/process.cpp.hpp>
+
 // os
 #if INFRA_OS_WINDOWS
-#include <Windows.h>
+#include <windows.h>
 #endif
 
 #if INFRA_OS_MACOS

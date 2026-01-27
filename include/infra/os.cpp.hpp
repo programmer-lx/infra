@@ -1,8 +1,8 @@
 #pragma once
 
-#pragma region HPP
+// you should define INFRA_OS_IMPL before include this file to enable the cpp part
 
-#include "infra/detail/os_detect.hpp"
+#pragma region HPP
 
 #ifndef INFRA_OS_API
     #define INFRA_OS_API
@@ -60,8 +60,10 @@ namespace infra::os
 #pragma region CPP
 #ifdef INFRA_OS_IMPL
 
+#include "infra/detail/os_detect.hpp"
+
 #if INFRA_OS_WINDOWS
-    #include <Windows.h>
+    #include <windows.h>
 #elif INFRA_OS_MACOS
 
 #elif INFRA_OS_LINUX

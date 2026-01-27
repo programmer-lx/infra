@@ -1,5 +1,7 @@
 #pragma once
 
+// you should define INFRA_BINARY_SERIALIZATION_IMPL before include this file to enable the cpp part
+
 #pragma region HPP
 
 // dll export macro

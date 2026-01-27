@@ -6,16 +6,16 @@
 
 namespace infra::binary_serialization
 {
-    template<typename ByteContainer, typename T>
+    template<typename ByteContainer, typename T, typename Allocator>
     void to_bytes(
         Writer<ByteContainer>& writer,
-        const std::vector<T>& vec
+        const std::vector<T, Allocator>& vec
     ) noexcept
     {
         const auto size = static_cast<uint64_t>(vec.size());
         writer << size;
 
-        using vec_size_t = std::vector<T>::size_type;
+        using vec_size_t = std::vector<T, Allocator>::size_type;
 
         for (uint64_t i = 0; i < size; ++i)
         {
@@ -23,16 +23,16 @@ namespace infra::binary_serialization
         }
     }
 
-    template<typename ByteContainer, typename T>
+    template<typename ByteContainer, typename T, typename Allocator>
     void from_bytes(
         Reader<ByteContainer>& reader,
-        std::vector<T>& vec
+        std::vector<T, Allocator>& vec
     ) noexcept
     {
         uint64_t size = 0;
         reader >> size;
 
-        using vec_size_t = std::vector<T>::size_type;
+        using vec_size_t = std::vector<T, Allocator>::size_type;
 
         vec.clear();
         vec.resize(static_cast<vec_size_t>(size));

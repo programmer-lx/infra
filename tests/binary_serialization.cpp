@@ -1208,10 +1208,11 @@ void char_arr_test()
 
 struct Storage_CArr
 {
-    char a[2][3];
-    char16_t b[4][2];
-    int64_t c;
-    int32_t d[2][2][3];
+    char a[2][3]; // 6B
+    char16_t b[4][2]; // 16B
+    int64_t c; // 8B
+    int32_t d[2][2][3]; // 48B
+    // total = 78B
 };
 
 namespace infra::binary_serialization
@@ -1275,7 +1276,7 @@ void c_arr_test()
         checksum = update_crc32c_checksum(
             checksum,
             std::bit_cast<uint8_t*>(&buffer[detail::DataOffset]),
-            sizeof(storage.a) + sizeof(storage.b) + sizeof(storage.c) + sizeof(storage.d)
+            78
         );
 
         checksum = update_crc32c_checksum(

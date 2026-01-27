@@ -167,10 +167,12 @@ namespace infra::binary_serialization
     {
     private:
         ByteContainer& m_arr;
-        size_t m_pos;
+        size_t m_pos = 0;
         crc32c_t m_crc32c_checksum = Initial_CRC32C;
 
-        size_t m_crc32c_bytes = 0; // 不需要每一次序列化value的时候，都计算一次CRC32C，等到字节数累计达到64B的时候，再进行计算即可
+        size_t m_data_bytes = 0;
+        size_t m_crc32c_pos = 0;
+        size_t m_crc32c_bytes = 0; // 不需要每一次序列化value的时候，都计算一次CRC32C，等到字节数累计达到一定数量的时候，再进行计算即可
         static constexpr size_t Desired_CRC32C_Bytes = 64;
 
         void auto_resize(size_t new_size) noexcept
@@ -186,21 +188,6 @@ namespace infra::binary_serialization
             }
         }
 
-    public:
-        void force_calculate_crc32c_before_jump() noexcept
-        {
-            using adaptor_t = Adaptor<ByteContainer>;
-
-            m_crc32c_checksum = update_crc32c_checksum(
-                m_crc32c_checksum,
-                std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
-                m_crc32c_bytes
-            );
-
-            m_crc32c_bytes = 0;
-        }
-
-    private:
         template<size_t Bytes>
         void value_impl(const void* src) noexcept
         {
@@ -242,7 +229,8 @@ namespace infra::binary_serialization
             // m_crc32c_bytes += Bytes;
             // if (m_crc32c_bytes >= Desired_CRC32C_Bytes)
             // {
-            //     force_calculate_crc32c_before_jump();
+            //     internal_update_checksum_(m_crc32c_pos);
+            //     m_crc32c_pos = m_pos + Bytes;
             // }
             jump(m_pos + Bytes);
         }
@@ -289,8 +277,8 @@ namespace infra::binary_serialization
         }
 
     public:
-        Writer(ByteContainer& arr, size_t pos)
-            : m_arr(arr), m_pos(pos)
+        explicit Writer(ByteContainer& arr)
+            : m_arr(arr)
         {
         }
 
@@ -338,7 +326,7 @@ namespace infra::binary_serialization
     {
     private:
         const ByteContainer& m_arr;
-        size_t m_pos;
+        size_t m_pos = 0;
 
     private:
         template<size_t Bytes>
@@ -418,8 +406,8 @@ namespace infra::binary_serialization
         }
 
     public:
-        Reader(const ByteContainer& arr, size_t pos)
-            : m_arr(arr), m_pos(pos)
+        explicit Reader(const ByteContainer& arr)
+            : m_arr(arr)
         {
         }
 
@@ -477,7 +465,7 @@ namespace infra::binary_serialization
             return result;
         }
 
-        typename SerializationDescriptor::writer_type writer(byte_array, 0);
+        typename SerializationDescriptor::writer_type writer(byte_array);
 
         // save magic
         writer << detail::MagicValue;
@@ -513,7 +501,7 @@ namespace infra::binary_serialization
             return result;
         }
 
-        typename SerializationDescriptor::reader_type reader(byte_array, 0);
+        typename SerializationDescriptor::reader_type reader(byte_array);
 
         // magic
         decltype(std::declval<detail::Header>().magic) magic;

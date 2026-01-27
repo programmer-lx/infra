@@ -745,15 +745,24 @@ namespace infra::binary_serialization
 
             size_t i = 0;
 
+            #if INFRA_ARCH_X86_64
+            for (; i + 8 <= size; i += 8)
+            {
+                uint64_t v;
+                // 避免未对齐 UB
+                std::memcpy(&v, data + i, sizeof(uint64_t));
+                crc = static_cast<uint32_t>(_mm_crc32_u64(crc, v));
+            }
+            #endif
+
             for (; i + 4 <= size; i += 4)
             {
                 uint32_t v;
-                // 避免未对齐 UB
                 std::memcpy(&v, data + i, sizeof(uint32_t));
                 crc = _mm_crc32_u32(crc, v);
             }
 
-            for (; i < size; i++)
+            for (; i < size; ++i)
             {
                 crc = _mm_crc32_u8(crc, data[i]);
             }

@@ -7,6 +7,9 @@
 #include <bit>
 #include <string>
 #include <stdexcept>
+#include <random>
+
+#include "test_utils.hpp"
 
 #include <infra/common.hpp>
 
@@ -33,6 +36,127 @@
 
 
 #pragma region checksum_test
+
+#if INFRA_ARCH_X86_64
+INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 uint32_t crc32c_x86_sse42_64(
+    uint32_t origin,
+    const uint8_t* data,
+    size_t size
+) noexcept
+{
+    uint32_t crc = origin ^ 0xffffffffu;
+
+    size_t i = 0;
+
+    for (; i + 8 <= size; i += 8)
+    {
+        uint64_t v;
+        // 避免未对齐 UB
+        std::memcpy(&v, data + i, sizeof(uint64_t));
+        crc = static_cast<uint32_t>(_mm_crc32_u64(crc, v));
+    }
+
+    for (; i + 4 <= size; i += 4)
+    {
+        uint32_t v;
+        std::memcpy(&v, data + i, sizeof(uint32_t));
+        crc = _mm_crc32_u32(crc, v);
+    }
+
+    for (; i < size; ++i)
+    {
+        crc = _mm_crc32_u8(crc, data[i]);
+    }
+
+    return crc ^ 0xffffffffu;
+}
+INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 uint32_t crc32c_x86_sse42_32(
+    uint32_t origin,
+    const uint8_t* data,
+    size_t size
+) noexcept
+{
+    uint32_t crc = origin ^ 0xffffffffu;
+
+    size_t i = 0;
+
+    for (; i + 4 <= size; i += 4)
+    {
+        uint32_t v;
+        std::memcpy(&v, data + i, sizeof(uint32_t));
+        crc = _mm_crc32_u32(crc, v);
+    }
+
+    for (; i < size; ++i)
+    {
+        crc = _mm_crc32_u8(crc, data[i]);
+    }
+
+    return crc ^ 0xffffffffu;
+}
+INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 uint32_t crc32c_x86_sse42_8(
+    uint32_t origin,
+    const uint8_t* data,
+    size_t size
+) noexcept
+{
+    uint32_t crc = origin ^ 0xffffffffu;
+
+    size_t i = 0;
+
+    for (; i < size; ++i)
+    {
+        crc = _mm_crc32_u8(crc, data[i]);
+    }
+
+    return crc ^ 0xffffffffu;
+}
+#endif //X86 64
+
+void x86_crc32c_speed()
+{
+#if INFRA_ARCH_X86_64
+
+    constexpr size_t BUFFER_SIZE = 1 * 1024 * 1024 * 30; // 30MB
+    std::vector<uint8_t> buffer(BUFFER_SIZE);
+
+    // 填充随机数据
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::uniform_int_distribution<int> dist(0, 255);
+    for (size_t i = 0; i < buffer.size(); ++i)
+    {
+        buffer[i] = static_cast<uint8_t>(dist(rng));
+    }
+
+    uint32_t crc = 0;
+
+    {
+        ScopeTimer timer("CRC32C sse4.2 64");
+        crc = crc32c_x86_sse42_64(0, buffer.data(), buffer.size());
+        std::cout << "Result: " << crc << "\n";
+    }
+
+    {
+        ScopeTimer timer("CRC32C sse4.2 32");
+        crc = crc32c_x86_sse42_32(0, buffer.data(), buffer.size());
+        std::cout << "Result: " << crc << "\n";
+    }
+
+    {
+        ScopeTimer timer("CRC32C sse4.2 8");
+        crc = crc32c_x86_sse42_8(0, buffer.data(), buffer.size());
+        std::cout << "Result: " << crc << "\n";
+    }
+
+    {
+        ScopeTimer timer("CRC32C scalar 8");
+        crc = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, buffer.data(), buffer.size());
+        std::cout << "Result: " << crc << "\n";
+    }
+
+#endif
+}
 
 void checksum_test_empty()
 {
@@ -279,6 +403,7 @@ void checksum_test_large_1024()
 
 void checksum_test()
 {
+    x86_crc32c_speed();
     checksum_test_empty();
     checksum_test_one_byte_zero();
     checksum_test_one_byte_ff();

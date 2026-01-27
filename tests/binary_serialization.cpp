@@ -593,69 +593,10 @@ void fixed_byte_array_test()
         Storage back = { 1000, 1000, 1000 };
         auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
         ASSERT(result);
-        ASSERT(result.error == Error::OK);
+        ASSERT(result.code == ResultCode::OK);
         ASSERT(back.a == 0x0102030405060708ULL);
         ASSERT(back.b == 0x11223344);
         ASSERT(back.c == 0x55667788);
-    }
-
-    // std::array 截断
-    {
-        Storage2 storage{0x0102030405060708ULL, 0x11223344, 0x55667788};
-        std::array<uint8_t, 22> buffer{}; // 12 + 8 + 2，只有a能被序列化
-
-        infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 22>>>(buffer, storage);
-
-        // magic
-        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
-
-        // checksum
-        crc32c_t checksum = update_crc32c_checksum(Initial_CRC32C, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataOffset], 8);
-        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
-
-        // data length
-        ASSERT(buffer[detail::DataLengthOffset + 0] == 8); // 只有a能被序列化
-        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x0);
-        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x0);
-        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x0);
-
-        // data
-        // 断言每个字节是否符合小端序
-        ASSERT(buffer[detail::DataOffset + 0]  == 0x08);
-        ASSERT(buffer[detail::DataOffset + 1]  == 0x07);
-        ASSERT(buffer[detail::DataOffset + 2]  == 0x06);
-        ASSERT(buffer[detail::DataOffset + 3]  == 0x05);
-        ASSERT(buffer[detail::DataOffset + 4]  == 0x04);
-        ASSERT(buffer[detail::DataOffset + 5]  == 0x03);
-        ASSERT(buffer[detail::DataOffset + 6]  == 0x02);
-        ASSERT(buffer[detail::DataOffset + 7]  == 0x01);
-
-        ASSERT(buffer[detail::DataOffset + 8]  == 0x0);
-        ASSERT(buffer[detail::DataOffset + 9]  == 0x0);
-        // ASSERT(buffer[detail::DataOffset + 10] == 0x0);
-        // ASSERT(buffer[detail::DataOffset + 11] == 0x0);
-
-        // ASSERT(buffer[detail::DataOffset + 12] == 0x0);
-        // ASSERT(buffer[detail::DataOffset + 13] == 0x0);
-        // ASSERT(buffer[detail::DataOffset + 14] == 0x0);
-        // ASSERT(buffer[detail::DataOffset + 15] == 0x0);
-
-        // 可以再断言 sizeof(Storage) 是否小于 buffer
-        ASSERT(sizeof(Storage) <= buffer.size());
-
-        // 反序列化测试
-        Storage2 back = { 1000, 1000, 1000 };
-        auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 22>>>(buffer, back);
-        ASSERT(result);
-        ASSERT(result.error == Error::OK);
-        ASSERT(back.a == 0x0102030405060708ULL);
-        ASSERT(back.b == 1000);
-        ASSERT(back.c == 1000);
     }
 
     // 递归测试 normal
@@ -756,7 +697,7 @@ void fixed_byte_array_test()
         auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 1024>>>(buffer, back);
 
         ASSERT(result);
-        ASSERT(result.error == Error::OK);
+        ASSERT(result.code == ResultCode::OK);
 
         ASSERT(back.s.a == 0x0102030405060708ULL);
         ASSERT(back.s.b == 0x11223344);
@@ -765,115 +706,6 @@ void fixed_byte_array_test()
         ASSERT(back.a == 0xA1A2A3A4A5A6A7A8ULL);
         ASSERT(back.b == 0x99AABBCC);
         ASSERT(back.c == 0xDDEE);
-    }
-
-    // 递归测试 截断
-    {
-        Storage_Structure storage{
-            Storage{ 0x0102030405060708ULL, 0x11223344, 0x55667788 },
-            0xA1A2A3A4A5A6A7A8ULL,
-            0x99AABBCC,
-            0xDDEE
-        };
-
-        // 12 + [16 + 8 + 4] + 1     []代表实际data段
-        std::array<uint8_t, 41> buffer{}; // c 不能参与序列化
-
-        [[maybe_unused]] auto serialize_result = infra::binary_serialization::serialize<Adaptor<std::array<uint8_t, 41>>>(buffer, storage);
-
-        // ---- magic ----
-        ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
-        ASSERT(buffer[detail::MagicOffset + 1] == detail::MagicValue[1]);
-        ASSERT(buffer[detail::MagicOffset + 2] == detail::MagicValue[2]);
-        ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
-
-        // ---- checksum ----
-        crc32c_t checksum = update_crc32c_checksum(
-            Initial_CRC32C,
-            &buffer[detail::MagicOffset],
-            detail::MagicSize
-        );
-        // truncated buffer
-        checksum = update_crc32c_checksum(
-            checksum,
-            &buffer[detail::DataOffset],
-            16+8+4
-        );
-        checksum = update_crc32c_checksum(
-            checksum,
-            &buffer[detail::DataLengthOffset],
-            detail::DataLengthSize
-        );
-        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
-
-        // ---- data length truncated ----
-        ASSERT(buffer[detail::DataLengthOffset + 0] == 16+8+4);
-        ASSERT(buffer[detail::DataLengthOffset + 1] == 0x00);
-        ASSERT(buffer[detail::DataLengthOffset + 2] == 0x00);
-        ASSERT(buffer[detail::DataLengthOffset + 3] == 0x00);
-
-        [[maybe_unused]] size_t off = detail::DataOffset;
-
-        // ---- Storage.s.a (uint64) ----
-        ASSERT(buffer[off + 0] == 0x08);
-        ASSERT(buffer[off + 1] == 0x07);
-        ASSERT(buffer[off + 2] == 0x06);
-        ASSERT(buffer[off + 3] == 0x05);
-        ASSERT(buffer[off + 4] == 0x04);
-        ASSERT(buffer[off + 5] == 0x03);
-        ASSERT(buffer[off + 6] == 0x02);
-        ASSERT(buffer[off + 7] == 0x01);
-
-        // ---- Storage.s.b (uint32) ----
-        ASSERT(buffer[off + 8]  == 0x44);
-        ASSERT(buffer[off + 9]  == 0x33);
-        ASSERT(buffer[off + 10] == 0x22);
-        ASSERT(buffer[off + 11] == 0x11);
-
-        // ---- Storage.s.c (uint32) ----
-        ASSERT(buffer[off + 12] == 0x88);
-        ASSERT(buffer[off + 13] == 0x77);
-        ASSERT(buffer[off + 14] == 0x66);
-        ASSERT(buffer[off + 15] == 0x55);
-
-        // ---- Storage_Structure.a (uint64) ----
-        ASSERT(buffer[off + 16] == 0xA8);
-        ASSERT(buffer[off + 17] == 0xA7);
-        ASSERT(buffer[off + 18] == 0xA6);
-        ASSERT(buffer[off + 19] == 0xA5);
-        ASSERT(buffer[off + 20] == 0xA4);
-        ASSERT(buffer[off + 21] == 0xA3);
-        ASSERT(buffer[off + 22] == 0xA2);
-        ASSERT(buffer[off + 23] == 0xA1);
-
-        // ---- Storage_Structure.b (uint32) ----
-        ASSERT(buffer[off + 24] == 0xCC);
-        ASSERT(buffer[off + 25] == 0xBB);
-        ASSERT(buffer[off + 26] == 0xAA);
-        ASSERT(buffer[off + 27] == 0x99);
-
-        // Storage_Structure.c (uint16) 已经被截断，不参与序列化，值为0
-        ASSERT(buffer[off + 28] == 0x0);
-
-        // ---- deserialize truncated buffer ----
-        Storage_Structure back{
-            {1000,1000,1000}, 1000, 1000, 1000
-        };
-
-        auto result = infra::binary_serialization::deserialize<Adaptor<std::array<uint8_t, 41>>>(buffer, back);
-
-        ASSERT(result);
-        ASSERT(result.error == Error::OK);
-
-        // 可读字段
-        ASSERT(back.s.a == 0x0102030405060708ULL);
-        ASSERT(back.s.b == 0x11223344);
-        ASSERT(back.s.c == 0x55667788);
-        ASSERT(back.a == 0xA1A2A3A4A5A6A7A8ULL);
-        ASSERT(back.b == 0x99AABBCC);
-
-        // 被截断字段保持原值（反序列化未修改）
-        ASSERT(back.c == 1000); // Storage_Structure.c 未参与反序列化
     }
 }
 
@@ -934,7 +766,7 @@ void dyn_array_test()
         Storage back = { 1000, 1000, 1000 };
         auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
         ASSERT(result);
-        ASSERT(result.error == Error::OK);
+        ASSERT(result.code == ResultCode::OK);
         ASSERT(back.a == 0x0102030405060708ULL);
         ASSERT(back.b == 0x11223344);
         ASSERT(back.c == 0x55667788);
@@ -1038,7 +870,7 @@ void dyn_array_test()
         auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         ASSERT(result);
-        ASSERT(result.error == Error::OK);
+        ASSERT(result.code == ResultCode::OK);
 
         ASSERT(back.s.a == 0x0102030405060708ULL);
         ASSERT(back.s.b == 0x11223344);
@@ -1106,7 +938,7 @@ void char_arr_test()
         std::vector<uint8_t> buffer{};
         [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
         ASSERT(ser_result);
-        ASSERT(ser_result.error == Error::OK);
+        ASSERT(ser_result.code == ResultCode::OK);
 
         // ---- magic ----
         ASSERT(buffer[detail::MagicOffset + 0] == detail::MagicValue[0]);
@@ -1180,7 +1012,7 @@ void char_arr_test()
         auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         ASSERT(result);
-        ASSERT(result.error == Error::OK);
+        ASSERT(result.code == ResultCode::OK);
 
         // ---- validate deserialized data ----
         ASSERT(back.a[0] == 'A');
@@ -1257,7 +1089,7 @@ void c_arr_test()
         std::vector<std::byte> buffer{};
         [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize<Adaptor<std::vector<std::byte>>>(buffer, storage);
         ASSERT(ser_result);
-        ASSERT(ser_result.error == Error::OK);
+        ASSERT(ser_result.code == ResultCode::OK);
 
         // ---- magic ----
         ASSERT(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 0]) == detail::MagicValue[0]);
@@ -1291,7 +1123,7 @@ void c_arr_test()
         Storage_CArr back{};
         auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<std::byte>>>(buffer, back);
         ASSERT(result);
-        ASSERT(result.error == Error::OK);
+        ASSERT(result.code == ResultCode::OK);
 
         // ---- validate deserialized data ----
 
@@ -1356,7 +1188,7 @@ void error_test()
 
         // 断言反序列化失败
         ASSERT(!result);
-        ASSERT(result.error == Error::MagicNumberIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(result.code == ResultCode::MagicNumberIncorrect); // 可以具体判断 checksum 错误
 
         // back没有发生改变
         ASSERT(back.a == 1000);
@@ -1382,11 +1214,24 @@ void error_test()
 
         // 断言反序列化失败
         ASSERT(!result);
-        ASSERT(result.error == Error::BufferSizeTooSmall); // 可以具体判断 checksum 错误
+        ASSERT(result.code == ResultCode::ByteContainerTooSmall); // 可以具体判断 checksum 错误
 
         ASSERT(back.a == 1000);
         ASSERT(back.b == 1001);
         ASSERT(back.c == 1002);
+    }
+
+    // data length error
+    // 不完整的序列化
+    {
+        Storage storage{0x0102030405060708ULL, 0x11223344, 0x55667788};
+        std::array<uint8_t, detail::DataOffset + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint32_t)-1> buffer{}; // buffer少了1字节
+
+        // 正常序列化
+        auto result = serialize<Adaptor<std::array<uint8_t, detail::DataOffset + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint32_t)-1>>>(buffer, storage);
+        ASSERT(buffer.size() == detail::DataOffset + sizeof(uint64_t) + sizeof(uint32_t) + sizeof(uint32_t) - 1);
+        ASSERT(!result);
+        ASSERT(result.code == ResultCode::IncompleteSerialization);
     }
 
     // data length error
@@ -1406,7 +1251,7 @@ void error_test()
 
         // 断言反序列化失败
         ASSERT(!result);
-        ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(result.code == ResultCode::ChecksumIncorrect); // 可以具体判断 checksum 错误
 
         ASSERT(back.a == 1000);
         ASSERT(back.b == 1001);
@@ -1430,7 +1275,7 @@ void error_test()
 
         // 断言反序列化失败
         ASSERT(!result);
-        ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(result.code == ResultCode::ChecksumIncorrect); // 可以具体判断 checksum 错误
 
         ASSERT(back.a == 1000);
         ASSERT(back.b == 1001);
@@ -1454,7 +1299,7 @@ void error_test()
 
         // 断言反序列化失败
         ASSERT(!result);
-        ASSERT(result.error == Error::ChecksumIncorrect); // 可以具体判断 checksum 错误
+        ASSERT(result.code == ResultCode::ChecksumIncorrect); // 可以具体判断 checksum 错误
 
         ASSERT(back.a == 1000);
         ASSERT(back.b == 1001);
@@ -1558,14 +1403,14 @@ void custom_structure_test()
         auto result1 = infra::binary_serialization::serialize< Adaptor<std::vector<uint8_t>> >(buffer, storage);
 
         ASSERT(result1);
-        ASSERT(result1.error == Error::OK);
+        ASSERT(result1.code == ResultCode::OK);
 
         // 反序列化
         Storage_CustomStruct back{};
         auto result2 = infra::binary_serialization::deserialize< Adaptor<std::vector<uint8_t>> >(buffer, back);
 
         ASSERT(result2);
-        ASSERT(result2.error == Error::OK);
+        ASSERT(result2.code == ResultCode::OK);
 
         // 验证结果
         ASSERT(back.std_u8string == storage.std_u8string);
@@ -1705,7 +1550,7 @@ void bool_test()
         auto result = infra::binary_serialization::deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
 
         ASSERT(result);
-        ASSERT(result.error == Error::OK);
+        ASSERT(result.code == ResultCode::OK);
 
         ASSERT(back.a  == 0x0102030405060708ULL);
         ASSERT(back.b1 == true);

@@ -15,7 +15,7 @@
 #include <cstring> // memcpy
 #include <cstddef> // std::byte
 
-#include <type_traits>
+#include <array> // for crc32c table
 #include <bit> // bit_cast
 #include <limits> // is_iec559
 
@@ -72,7 +72,84 @@ namespace infra::binary_serialization
     }
 
     // checksum
-    INFRA_BINARY_SERIALIZATION_API crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept;
+    namespace detail
+    {
+#if INFRA_ARCH_X86
+        INFRA_BINARY_SERIALIZATION_API INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2
+        crc32c_t update_crc32c_checksum_x86(
+            crc32c_t origin,
+            const uint8_t* data,
+            size_t size
+        ) noexcept;
+#endif
+
+#if INFRA_ARCH_ARM
+        INFRA_BINARY_SERIALIZATION_API crc32c_t update_crc32c_checksum_arm(
+            crc32c_t origin,
+            const uint8_t* data,
+            size_t size
+        ) noexcept;
+#endif
+
+        static constexpr crc32c_t CRC32C_POLY = 0x82F63B78;
+
+        static consteval std::array<crc32c_t, 256> make_crc32c_table()
+        {
+            std::array<crc32c_t, 256> table{};
+
+            for (crc32c_t i = 0; i < 256; i++)
+            {
+                crc32c_t c = i;
+                for (int j = 0; j < 8; j++)
+                {
+                    if (c & 1)
+                        c = CRC32C_POLY ^ (c >> 1);
+                    else
+                        c >>= 1;
+                }
+                table[i] = c;
+            }
+            return table;
+        }
+
+        static constexpr auto crc32c_table = make_crc32c_table();
+
+        inline crc32c_t update_crc32c_checksum_scalar(
+            crc32c_t origin,
+            const uint8_t* data,
+            size_t size
+        ) noexcept
+        {
+            origin ^= 0xffffffffu;
+
+            for (size_t i = 0; i < size; i++)
+            {
+                uint8_t index = (origin ^ data[i]) & 0xff;
+                origin = (origin >> 8) ^ crc32c_table[index];
+            }
+
+            return origin ^ 0xffffffffu;
+        }
+
+        INFRA_BINARY_SERIALIZATION_API bool support_crc32_intrinsic() noexcept;
+    }
+    inline crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept
+    {
+        // 统一进行cpuid检查，如果支持使用原生指令进行计算，则使用，否则使用fallback标量版本
+        static bool support = detail::support_crc32_intrinsic();
+        if (support) [[likely]]
+        {
+        #if INFRA_ARCH_X86
+            return detail::update_crc32c_checksum_x86(origin, data, size);
+        #elif INFRA_ARCH_ARM
+            return detail::update_crc32c_checksum_arm(origin, data, size);
+        #endif
+        }
+        else [[unlikely]]
+        {
+            return detail::update_crc32c_checksum_scalar(origin, data, size);
+        }
+    }
 
     template<typename T>
     concept is_bool = std::is_same_v<std::remove_cv_t<T>, bool>;
@@ -139,6 +216,27 @@ namespace infra::binary_serialization
     template<typename T>
     concept is_structure = std::is_class_v<std::remove_cv_t<T>>;
 
+    enum class ResultCode
+    {
+        OK = 0,                             // 无错误
+
+        InvalidBoolValue,                   // 无效的bool值，bool会被序列化成1B，但值只能是0或1
+        IncompleteSerialization,            // 不完整的序列化，只序列化或反序列化了部分对象
+        ByteContainerTooSmall,              // byte_container的容量比文件要小，或者是文件的data_length字段出现错误
+        MagicNumberIncorrect,               // magic number 错误
+        ChecksumIncorrect,                  // CRC32C校验失败
+    };
+
+    struct Result
+    {
+        ResultCode code = ResultCode::OK;
+
+        explicit operator bool() const noexcept
+        {
+            return code == ResultCode::OK;
+        }
+    };
+
     template<typename ByteContainer>
     class Writer;
 
@@ -171,6 +269,7 @@ namespace infra::binary_serialization
         ByteContainer& m_arr;
         size_t m_pos = 0;
         crc32c_t m_crc32c_checksum = Initial_CRC32C;
+        ResultCode m_result = ResultCode::OK;
 
         void auto_resize(size_t new_size) noexcept
         {
@@ -188,12 +287,18 @@ namespace infra::binary_serialization
         template<size_t Bytes>
         void value_impl(const void* src) noexcept
         {
+            // fail-fast
+            if (m_result != ResultCode::OK)
+                return;
+
             using adaptor_t = Adaptor<ByteContainer>;
 
             if constexpr (!adaptor_t::resizeable())
             {
                 if (m_pos + Bytes > adaptor_t::size(m_arr))
                 {
+                    // 序列化不完整，只序列化了对象的部分字段
+                    m_result = ResultCode::IncompleteSerialization;
                     return;
                 }
             }
@@ -263,6 +368,11 @@ namespace infra::binary_serialization
         {
         }
 
+        [[nodiscard]] ResultCode get_result() const noexcept
+        {
+            return m_result;
+        }
+
         void update_checksum(size_t offset, size_t size) noexcept
         {
             using adaptor_t = Adaptor<ByteContainer>;
@@ -320,15 +430,20 @@ namespace infra::binary_serialization
         const ByteContainer& m_arr;
         size_t m_pos = 0;
         crc32c_t m_checksum = Initial_CRC32C;
+        ResultCode m_result = ResultCode::OK;
 
     private:
         template<size_t Bytes>
         void value_impl(void* dst) noexcept
         {
+            if (m_result != ResultCode::OK)
+                return;
+
             using adaptor_t = Adaptor<ByteContainer>;
             
             if (m_pos + Bytes > adaptor_t::size(m_arr))
             {
+                m_result = ResultCode::ByteContainerTooSmall;
                 return;
             }
 
@@ -356,7 +471,7 @@ namespace infra::binary_serialization
             // if (v != 0 && v != 1)
             if ((v & 0b11111110) != 0)
             {
-                // TODO check
+                m_result = ResultCode::InvalidBoolValue;
                 return;
             }
 
@@ -404,6 +519,11 @@ namespace infra::binary_serialization
         {
         }
 
+        [[nodiscard]] ResultCode get_result() const noexcept
+        {
+            return m_result;
+        }
+
         void update_checksum(size_t offset, size_t size) noexcept
         {
             using adaptor_t = Adaptor<ByteContainer>;
@@ -444,24 +564,6 @@ namespace infra::binary_serialization
         }
     };
 
-    enum class Error
-    {
-        OK = 0,
-        BufferSizeTooSmall,
-        MagicNumberIncorrect,
-        ChecksumIncorrect,
-    };
-
-    struct Result
-    {
-        Error error = Error::OK;
-
-        explicit operator bool() const
-        {
-            return error == Error::OK;
-        }
-    };
-
     template<typename ContainerAdaptor, typename ByteContainer, typename Object>
     Result serialize(ByteContainer& byte_array, const Object& object)
     {
@@ -470,7 +572,7 @@ namespace infra::binary_serialization
         ContainerAdaptor::resize(byte_array, detail::DataOffset);
         if (ContainerAdaptor::size(byte_array) < detail::DataOffset)
         {
-            result.error = Error::BufferSizeTooSmall;
+            result.code = ResultCode::ByteContainerTooSmall;
             return result;
         }
 
@@ -479,6 +581,12 @@ namespace infra::binary_serialization
         // save magic
         writer << detail::MagicValue;
         writer.update_checksum(detail::MagicOffset, detail::MagicSize);
+        ResultCode result_code = writer.get_result();
+        if (result_code != ResultCode::OK)
+        {
+            result.code = result_code;
+            return result;
+        }
 
         // data length (写完数据后再填充)
         // checksum (写完数据后再填充)
@@ -486,18 +594,36 @@ namespace infra::binary_serialization
         // data
         writer.jump(detail::DataOffset);
         to_bytes(writer, object);
+        result_code = writer.get_result();
+        if (result_code != ResultCode::OK)
+        {
+            result.code = result_code;
+            return result;
+        }
         const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
         writer.update_checksum(detail::DataOffset, static_cast<size_t>(data_length));
 
         // data length
         writer.jump(detail::DataLengthOffset);
         writer << data_length;
+        result_code = writer.get_result();
+        if (result_code != ResultCode::OK)
+        {
+            result.code = result_code;
+            return result;
+        }
         writer.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
 
         // checksum
         const crc32c_t checksum = writer.checksum();
         writer.jump(detail::ChecksumOffset);
         writer << checksum;
+        result_code = writer.get_result();
+        if (result_code != ResultCode::OK)
+        {
+            result.code = result_code;
+            return result;
+        }
 
         return result;
     }
@@ -509,7 +635,7 @@ namespace infra::binary_serialization
 
         if (ContainerAdaptor::size(byte_array) <= detail::DataOffset)
         {
-            result.error = Error::BufferSizeTooSmall;
+            result.code = ResultCode::ByteContainerTooSmall;
             return result;
         }
 
@@ -520,7 +646,7 @@ namespace infra::binary_serialization
         reader >> magic;
         if (memcmp(magic, detail::MagicValue, detail::MagicSize) != 0)
         {
-            result.error = Error::MagicNumberIncorrect;
+            result.code = ResultCode::MagicNumberIncorrect;
             return result;
         }
 
@@ -531,7 +657,7 @@ namespace infra::binary_serialization
         // byte_array的容量一定要比文件大
         if (ContainerAdaptor::size(byte_array) < data_length + detail::DataOffset)
         {
-            result.error = Error::BufferSizeTooSmall;
+            result.code = ResultCode::ByteContainerTooSmall;
             return result;
         }
 
@@ -544,12 +670,18 @@ namespace infra::binary_serialization
         reader.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
         if (reader.checksum() != checksum)
         {
-            result.error = Error::ChecksumIncorrect;
+            result.code = ResultCode::ChecksumIncorrect;
             return result;
         }
 
         // data
         from_bytes(reader, object);
+        const ResultCode result_code = reader.get_result();
+        if (result_code != ResultCode::OK)
+        {
+            result.code = result_code;
+            return result;
+        }
 
         return result;
     }
@@ -561,8 +693,6 @@ namespace infra::binary_serialization
 
 #pragma region CPP
 #ifdef INFRA_BINARY_SERIALIZATION_IMPL
-
-#include <array>
 
 #if INFRA_ARCH_X86
     #if defined(_MSC_VER)
@@ -577,160 +707,108 @@ namespace infra::binary_serialization
 
 namespace infra::binary_serialization
 {
-    static constexpr crc32c_t CRC32C_POLY = 0x82F63B78;
-
-    static consteval std::array<crc32c_t, 256> make_crc32c_table()
+    namespace detail
     {
-        std::array<crc32c_t, 256> table{};
-
-        for (crc32c_t i = 0; i < 256; i++)
-        {
-            crc32c_t c = i;
-            for (int j = 0; j < 8; j++)
-            {
-                if (c & 1)
-                    c = CRC32C_POLY ^ (c >> 1);
-                else
-                    c >>= 1;
-            }
-            table[i] = c;
-        }
-        return table;
-    }
-
-    static constexpr auto crc32c_table = make_crc32c_table();
-
 #if INFRA_ARCH_X86
-    // leaf: EAX, sub_leaf: ECX
-    static void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t* abcd) noexcept
-    {
-    #if defined(_MSC_VER)
-        int regs[4];
-        __cpuidex(regs, static_cast<int>(leaf), static_cast<int>(sub_leaf));
-        for (int i = 0; i < 4; ++i)
+        // leaf: EAX, sub_leaf: ECX
+        static void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t* abcd) noexcept
         {
-            abcd[i] = static_cast<uint32_t>(regs[i]);
+        #if defined(_MSC_VER)
+            int regs[4];
+            __cpuidex(regs, static_cast<int>(leaf), static_cast<int>(sub_leaf));
+            for (int i = 0; i < 4; ++i)
+            {
+                abcd[i] = static_cast<uint32_t>(regs[i]);
+            }
+        #else
+            uint32_t a;
+            uint32_t b;
+            uint32_t c;
+            uint32_t d;
+            __cpuid_count(leaf, sub_leaf, a, b, c, d);
+            abcd[0] = a;
+            abcd[1] = b;
+            abcd[2] = c;
+            abcd[3] = d;
+        #endif
         }
-    #else
-        uint32_t a;
-        uint32_t b;
-        uint32_t c;
-        uint32_t d;
-        __cpuid_count(leaf, sub_leaf, a, b, c, d);
-        abcd[0] = a;
-        abcd[1] = b;
-        abcd[2] = c;
-        abcd[3] = d;
-    #endif
-    }
 #endif // ARCH X86
 
-    static crc32c_t update_crc32c_checksum_scalar(
-        crc32c_t origin,
-        const uint8_t* data,
-        size_t size) noexcept
-    {
-        origin ^= 0xffffffffu;
-
-        for (size_t i = 0; i < size; i++)
-        {
-            uint8_t index = (origin ^ data[i]) & 0xff;
-            origin = (origin >> 8) ^ crc32c_table[index];
-        }
-
-        return origin ^ 0xffffffffu;
-    }
-
 #if INFRA_ARCH_X86
-    INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 static crc32c_t update_crc32c_checksum_x86(
-        crc32c_t origin,
-        const uint8_t* data,
-        size_t size) noexcept
-    {
-        uint32_t crc = origin ^ 0xffffffffu;
-
-        size_t i = 0;
-
-        for (; i + 4 <= size; i += 4)
+        INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 crc32c_t update_crc32c_checksum_x86(
+            crc32c_t origin,
+            const uint8_t* data,
+            size_t size
+        ) noexcept
         {
-            uint32_t v;
-            // 避免未对齐 UB
-            std::memcpy(&v, data + i, sizeof(uint32_t));
-            crc = _mm_crc32_u32(crc, v);
-        }
+            uint32_t crc = origin ^ 0xffffffffu;
 
-        for (; i < size; i++)
-        {
-            crc = _mm_crc32_u8(crc, data[i]);
-        }
+            size_t i = 0;
 
-        return crc ^ 0xffffffffu;
-    }
+            for (; i + 4 <= size; i += 4)
+            {
+                uint32_t v;
+                // 避免未对齐 UB
+                std::memcpy(&v, data + i, sizeof(uint32_t));
+                crc = _mm_crc32_u32(crc, v);
+            }
+
+            for (; i < size; i++)
+            {
+                crc = _mm_crc32_u8(crc, data[i]);
+            }
+
+            return crc ^ 0xffffffffu;
+        }
 #endif
 
 #if INFRA_ARCH_ARM
-    static crc32c_t update_crc32c_checksum_arm(
-        crc32c_t origin,
-        const uint8_t* data,
-        size_t size) noexcept
-    {
-        uint32_t crc = origin ^ 0xffffffffu;
-
-        size_t i = 0;
-
-        for (; i + 4 <= size; i += 4)
+        crc32c_t update_crc32c_checksum_arm(
+            crc32c_t origin,
+            const uint8_t* data,
+            size_t size
+        ) noexcept
         {
-            uint32_t v;
-            std::memcpy(&v, data + i, sizeof(uint32_t)); // 避免未对齐 UB
-            crc = __crc32cw(crc, v);
-        }
+            uint32_t crc = origin ^ 0xffffffffu;
 
-        for (; i < size; i++)
-        {
-            crc = __crc32cb(crc, data[i]);
-        }
+            size_t i = 0;
 
-        return crc ^ 0xffffffffu;
-    }
+            for (; i + 4 <= size; i += 4)
+            {
+                uint32_t v;
+                std::memcpy(&v, data + i, sizeof(uint32_t)); // 避免未对齐 UB
+                crc = __crc32cw(crc, v);
+            }
+
+            for (; i < size; i++)
+            {
+                crc = __crc32cb(crc, data[i]);
+            }
+
+            return crc ^ 0xffffffffu;
+        }
 #endif
 
-    static bool support_crc32_intrinsic() noexcept
-    {
-    #if INFRA_ARCH_X86
-        uint32_t abcd[4]{};
-        cpuid(0, 0, abcd);
-        const uint32_t max_leaf = abcd[0];
-        if (max_leaf >= 1)
-        {
-            cpuid(1, 0, abcd);
-            // SSE4.2: EAX 1, ECX 20
-            const uint32_t ecx = abcd[2];
-            return (ecx & (1 << 20)) != 0;
-        }
-        return false;
-    #elif INFRA_ARCH_ARM
-        // TODO
-        return true;
-    #else
-        return false;
-    #endif
-    }
-
-    crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept
-    {
-        // 统一进行cpuid检查，如果支持使用原生指令进行计算，则使用，否则使用fallback标量版本
-        static bool support = support_crc32_intrinsic();
-        if (support) [[likely]]
+        bool support_crc32_intrinsic() noexcept
         {
         #if INFRA_ARCH_X86
-            return update_crc32c_checksum_x86(origin, data, size);
+            uint32_t abcd[4]{};
+            cpuid(0, 0, abcd);
+            const uint32_t max_leaf = abcd[0];
+            if (max_leaf >= 1)
+            {
+                cpuid(1, 0, abcd);
+                // SSE4.2: EAX 1, ECX 20
+                const uint32_t ecx = abcd[2];
+                return (ecx & (1 << 20)) != 0;
+            }
+            return false;
         #elif INFRA_ARCH_ARM
-            return update_crc32c_checksum_arm(origin, data, size);
+            // TODO
+            return true;
+        #else
+            return false;
         #endif
-        }
-        else [[unlikely]]
-        {
-            return update_crc32c_checksum_scalar(origin, data, size);
         }
     }
 } // namespace infra::binary_serialization

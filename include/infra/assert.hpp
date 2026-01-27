@@ -15,8 +15,20 @@
     #define INFRA_DEBUG_BREAK() ((void)0)
 #endif
 
-// unreachable (Debug: break and abort; Release: abort)
-#define INFRA_UNREACHABLE() do { INFRA_DEBUG_BREAK(); std::abort(); } while (0)
+
+// unreachable (Debug: break; Release: unreachable)
+#ifndef NDEBUG
+    #define INFRA_UNREACHABLE() do { INFRA_DEBUG_BREAK(); } while (0)
+#else
+    #if INFRA_COMPILER_MSVC
+        #define INFRA_UNREACHABLE() __assume(false)
+    #elif INFRA_COMPILER_GCC || INFRA_COMPILER_CLANG
+        #define INFRA_UNREACHABLE() __builtin_unreachable()
+    #else
+        #define INFRA_UNREACHABLE() ((void)0)
+    #endif
+#endif
+
 
 // debug assert (Debug: break; Release: do nothing)
 #ifndef NDEBUG

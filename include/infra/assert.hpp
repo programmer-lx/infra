@@ -32,14 +32,9 @@
 
 // debug assert (Debug: break; Release: do nothing)
 #ifndef NDEBUG
-    #define INFRA_DEBUG_ASSERT(expr)                \
-        do {                                        \
-            if (!(expr)) {                          \
-                INFRA_DEBUG_BREAK();                \
-            }                                       \
-        } while (0)
+    #define INFRA_DEBUG_ASSERT(expr) do { if (!(expr)) { INFRA_DEBUG_BREAK(); } } while (0)
 #else
-    #define INFRA_DEBUG_ASSERT(expr)                ((void)0)
+    #define INFRA_DEBUG_ASSERT(expr) ((void)0)
 #endif
 #define INFRA_DEBUG_ASSERT_WITH_MSG(expr, msg) INFRA_DEBUG_ASSERT(expr)
 

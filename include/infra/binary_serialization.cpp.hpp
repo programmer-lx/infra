@@ -456,6 +456,7 @@ namespace infra::binary_serialization
     {
         OK = 0,
         BufferSizeTooSmall,
+        DataLengthIsZero,
         MagicNumberIncorrect,
         ChecksumIncorrect,
     };
@@ -524,7 +525,7 @@ namespace infra::binary_serialization
         typename SerializationDescriptor::reader_type reader(byte_array);
 
         // magic
-        decltype(std::declval<detail::Header>().magic) magic;
+        decltype(std::declval<detail::Header>().magic) magic = {};
         reader >> magic;
         if (memcmp(magic, detail::MagicValue, detail::MagicSize) != 0)
         {
@@ -533,11 +534,16 @@ namespace infra::binary_serialization
         }
 
         // data length
-        decltype(std::declval<detail::Header>().data_length) data_length;
+        decltype(std::declval<detail::Header>().data_length) data_length = 0;
         reader >> data_length;
+        if (data_length == 0)
+        {
+            result.error = Error::DataLengthIsZero;
+            return result;
+        }
 
         // checksum
-        decltype(std::declval<detail::Header>().checksum) checksum;
+        decltype(std::declval<detail::Header>().checksum) checksum = Initial_CRC32C;
         reader >> checksum;
 
         reader.update_checksum(detail::MagicOffset, detail::MagicSize);
@@ -601,6 +607,7 @@ namespace infra::binary_serialization
 
     static constexpr auto crc32c_table = make_crc32c_table();
 
+#if INFRA_ARCH_X86
     // leaf: EAX, sub_leaf: ECX
     static void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t* abcd) noexcept
     {
@@ -623,6 +630,7 @@ namespace infra::binary_serialization
         abcd[3] = d;
     #endif
     }
+#endif // ARCH X86
 
     static crc32c_t update_crc32c_checksum_scalar(
         crc32c_t origin,

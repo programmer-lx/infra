@@ -1373,6 +1373,30 @@ void error_test()
         serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
 
         // 模拟文件损坏，修改 data 部分一个字节
+        *reinterpret_cast<data_length_t*>(&buffer[detail::DataLengthOffset]) = 0;
+
+        // 反序列化
+        Storage back = { 1000, 1001, 1002 };
+        auto result = deserialize<Adaptor<std::vector<uint8_t>>>(buffer, back);
+
+        // 断言反序列化失败
+        ASSERT(!result);
+        ASSERT(result.error == Error::DataLengthIsZero); // 可以具体判断 checksum 错误
+
+        ASSERT(back.a == 1000);
+        ASSERT(back.b == 1001);
+        ASSERT(back.c == 1002);
+    }
+
+    // data length error
+    {
+        Storage storage{0x0102030405060708ULL, 0x11223344, 0x55667788};
+        std::vector<uint8_t> buffer{};
+
+        // 正常序列化
+        serialize<Adaptor<std::vector<uint8_t>>>(buffer, storage);
+
+        // 模拟文件损坏，修改 data 部分一个字节
         buffer[detail::DataLengthOffset] -= 1;
 
         // 反序列化

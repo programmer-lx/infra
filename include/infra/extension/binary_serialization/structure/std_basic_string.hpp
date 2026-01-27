@@ -7,10 +7,10 @@
 
 namespace infra::binary_serialization
 {
-    template<typename ByteContainer>
+    template<typename ByteContainer, is_serializable_char Char>
     void to_bytes(
         Writer<ByteContainer>& writer,
-        const std::u8string& str
+        const std::basic_string<Char>& str
     ) noexcept
     {
         const auto size = static_cast<uint64_t>(str.size());
@@ -18,20 +18,20 @@ namespace infra::binary_serialization
 
         for (uint64_t i = 0; i < size; ++i)
         {
-            writer << str[static_cast<std::u8string::size_type>(i)];
+            writer << str[static_cast<std::basic_string<Char>::size_type>(i)];
         }
     }
 
-    template<typename ByteContainer>
+    template<typename ByteContainer, is_serializable_char Char>
     void from_bytes(
         Reader<ByteContainer>& reader,
-        std::u8string& str
+        std::basic_string<Char>& str
     ) noexcept
     {
         uint64_t size = 0;
         reader >> size;
 
-        using str_size_t = std::u8string::size_type;
+        using str_size_t = std::basic_string<Char>::size_type;
 
         str.clear();
         str.resize(static_cast<str_size_t>(size));

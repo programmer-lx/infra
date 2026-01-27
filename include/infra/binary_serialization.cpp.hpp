@@ -170,11 +170,6 @@ namespace infra::binary_serialization
         size_t m_pos = 0;
         crc32c_t m_crc32c_checksum = Initial_CRC32C;
 
-        size_t m_data_bytes = 0;
-        size_t m_crc32c_pos = 0;
-        size_t m_crc32c_bytes = 0; // 不需要每一次序列化value的时候，都计算一次CRC32C，等到字节数累计达到一定数量的时候，再进行计算即可
-        static constexpr size_t Desired_CRC32C_Bytes = 64;
-
         void auto_resize(size_t new_size) noexcept
         {
             using adaptor_t = Adaptor<ByteContainer>;
@@ -226,12 +221,6 @@ namespace infra::binary_serialization
                 );
             }
 
-            // m_crc32c_bytes += Bytes;
-            // if (m_crc32c_bytes >= Desired_CRC32C_Bytes)
-            // {
-            //     internal_update_checksum_(m_crc32c_pos);
-            //     m_crc32c_pos = m_pos + Bytes;
-            // }
             jump(m_pos + Bytes);
         }
 
@@ -476,9 +465,9 @@ namespace infra::binary_serialization
         // data
         writer.jump(detail::DataOffset);
         to_bytes(writer, object);
+        const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
 
         // data length
-        const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
         writer.jump(detail::DataLengthOffset);
         writer << data_length;
 

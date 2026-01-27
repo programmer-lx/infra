@@ -178,7 +178,7 @@ namespace infra::cpu
         };
 
         // leaf: EAX, sub_leaf: ECX
-        static void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t* abcd) noexcept
+        static void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t abcd[4]) noexcept
         {
 #if defined(_MSC_VER)
             int regs[4];

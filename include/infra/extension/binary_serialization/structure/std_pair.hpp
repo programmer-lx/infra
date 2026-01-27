@@ -2,7 +2,7 @@
 
 #include <utility> // std::pair
 
-#include "infra/binary_serialization.hpp"
+#include "infra/binary_serialization.cpp.hpp"
 
 namespace infra::binary_serialization
 {

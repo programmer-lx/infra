@@ -1,16 +1,33 @@
 #pragma once
 
+#pragma region HPP
+
+// dll export macro
+#ifndef INFRA_BINARY_SERIALIZATION_API
+    #define INFRA_BINARY_SERIALIZATION_API
+#endif
+
+
+#include <climits> // CHAR_BIT
 #include <cstdint>
-#include <cstring>
+#include <cstring> // memcpy
+#include <cstddef> // std::byte
 
-#include <array>
 #include <type_traits>
-#include <bit>
+#include <bit> // bit_cast
+#include <limits> // is_iec559
 
+#include "arch.hpp"
 #include "meta.hpp"
 #include "assert.hpp"
 #include "attributes.hpp"
 #include "endian.hpp"
+
+
+// static check
+static_assert(sizeof(char) == 1 && sizeof(uint8_t) ==1 && sizeof(std::byte) == 1, "sizeof(char) MUST == 1");
+static_assert(CHAR_BIT == 8, "char bit MUST == 8");
+
 
 /*
 序列化buffer存储结构设计:
@@ -50,40 +67,17 @@ namespace infra::binary_serialization
 
         static constexpr size_t DataOffset = sizeof(Header);
         static_assert(DataOffset == 12);
-
-        template<typename T>
-        concept has_resize = requires(T& t)
-        {
-            t.resize(1, static_cast<T::value_type>(0));
-        };
-
-        constexpr checksum_t CRC32_POLY = 0xEDB88320;
-
-        consteval std::array<checksum_t, 256> make_crc32_table()
-        {
-            std::array<checksum_t, 256> table{};
-
-            for (checksum_t i = 0; i < 256; i++)
-            {
-                checksum_t c = i;
-                for (int j = 0; j < 8; j++)
-                {
-                    if (c & 1)
-                        c = CRC32_POLY ^ (c >> 1);
-                    else
-                        c >>= 1;
-                }
-                table[i] = c;
-            }
-            return table;
-        }
-
-        constexpr auto crc32_table = make_crc32_table();
     }
+
+    // checksum
+    INFRA_BINARY_SERIALIZATION_API checksum_t update_checksum(checksum_t origin, const uint8_t* data, size_t size) noexcept;
+
+    template<typename T>
+    concept is_bool = std::is_same_v<std::remove_cv_t<T>, bool>;
     
     template<typename T>
     concept is_serializable_integral =
-        meta::is_any_type_of_v<std::remove_cvref_t<T>,
+        meta::is_any_type_of_v<std::remove_cv_t<T>,
             uint8_t , int8_t ,
             uint16_t, int16_t,
             uint32_t, int32_t,
@@ -92,46 +86,37 @@ namespace infra::binary_serialization
         
     template<typename T>
     concept is_serializable_floating_point =
-        (std::is_same_v<std::remove_cvref_t<T>, float> && std::numeric_limits<float>::is_iec559) ||
-        (std::is_same_v<std::remove_cvref_t<T>, double> && std::numeric_limits<double>::is_iec559);
+        (std::is_same_v<std::remove_cv_t<T>, float> && std::numeric_limits<float>::is_iec559 && sizeof(float) == 4) ||
+        (std::is_same_v<std::remove_cv_t<T>, double> && std::numeric_limits<double>::is_iec559 && sizeof(double) == 8);
             
     template<typename T>
     concept is_serializable_number = is_serializable_integral<T> || is_serializable_floating_point<T>;
 
     template<typename T>
-    concept is_serializable_char_value =
-        meta::is_any_type_of_v<std::remove_cvref_t<T>,
-            char8_t, char16_t, char32_t
+    concept is_serializable_char =
+        meta::is_any_type_of_v<std::remove_cv_t<T>,
+            char,
+            char8_t,
+            char16_t, char32_t
         >;
 
     template<typename T>
-    concept is_serializable_enum_value =
-        std::is_enum_v<std::remove_cvref_t<T>> &&
-        is_serializable_integral<std::underlying_type_t<std::remove_cvref_t<T>>>;
-    
-    // 所有基础类型
+    concept is_serializable_enum =
+        std::is_enum_v<std::remove_cv_t<T>> &&
+        requires {
+            typename std::underlying_type_t<std::remove_cv_t<T>>;
+        } &&
+        is_serializable_integral<std::underlying_type_t<std::remove_cv_t<T>>>;
+
+    // 所有字节长度确定的基础类型
     template<typename T>
     concept is_value =
-        is_serializable_number<T>       ||
-        is_serializable_char_value<T>   ||
-        is_serializable_enum_value<T>;
+        is_serializable_number<T>   ||
+        is_serializable_char<T>     ||
+        is_serializable_enum<T>;
 
     template <typename T>
     concept is_1byte = (sizeof(T) == 1) && is_value<T>;
-
-    template<is_1byte B>
-    checksum_t update_checksum(checksum_t origin, const B* data, size_t size) noexcept
-    {
-        origin = origin ^ 0xffffffff;
-
-        for (size_t i = 0; i < size; i++)
-        {
-            uint8_t index = (origin ^ std::bit_cast<uint8_t>(data[i])) & 0xff;
-            origin = (origin >> 8) ^ detail::crc32_table[index];
-        }
-
-        return origin ^ 0xffffffff;
-    }
     
     namespace detail
     {
@@ -147,10 +132,10 @@ namespace infra::binary_serialization
     
     // N维C数组
     template<typename T>
-    concept is_c_array = detail::is_c_arr_impl<T>::value;
+    concept is_c_array = detail::is_c_arr_impl<std::remove_cv_t<T>>::value;
 
     template<typename T>
-    concept is_structure = std::is_class_v<T>;
+    concept is_structure = std::is_class_v<std::remove_cv_t<T>>;
 
     template<typename ByteContainer>
     class Writer;
@@ -159,15 +144,15 @@ namespace infra::binary_serialization
     class Reader;
 
     // 需要实现接口:
-    // using byte_type   = ByteType of ByteContainer;
-    // using writer_type = Writer<ByteContainer>;
-    // using reader_type = Reader<ByteContainer>;
-    // static           size_t       size(const ByteContainer& container)
-    // static           ByteType*    data(ByteContainer& container)
-    // static const     ByteType*    data(const ByteContainer& container)
-    // static           void         resize(ByteContainer& vec, size_t new_size)
-    // static           void         push_back(ByteContainer& vec, const ByteType& val)
-    // static constexpr bool         resizeable()
+    // using  byte_type     = value type of ByteContainer;
+    // using  writer_type   = Writer<ByteContainer>;
+    // using  reader_type   = Reader<ByteContainer>;
+    // static               size_t       size(const ByteContainer& container)
+    // static               ByteType*    data(ByteContainer& container)
+    // static const         ByteType*    data(const ByteContainer& container)
+    // static               void         resize(ByteContainer& vec, size_t new_size)
+    // static               void         push_back(ByteContainer& vec, const ByteType& val)
+    // static constexpr     bool         resizeable() - (类似于std::array的容器，返回false，类似于std::vector的容器，返回true)
     template<typename ByteContainer>
     struct Adaptor;
 
@@ -254,6 +239,12 @@ namespace infra::binary_serialization
             return m_checksum;
         }
 
+        void bool_value(const bool& b) noexcept
+        {
+            const uint8_t v = b ? 1 : 0;
+            value_impl<sizeof(uint8_t)>(&v);
+        }
+
         template<is_value T>
         void value(const T& v) noexcept
         {
@@ -292,9 +283,13 @@ namespace infra::binary_serialization
         template<typename T>
         void operator<<(const T& var) noexcept
         {
-            static_assert(is_value<T> || is_c_array<T> || is_structure<T>);
+            static_assert(is_bool<T> || is_value<T> || is_c_array<T> || is_structure<T>);
 
-            if constexpr (is_value<T>)
+            if constexpr (is_bool<T>)
+            {
+                bool_value(var);
+            }
+            else if constexpr (is_value<T>)
             {
                 value(var);
             }
@@ -349,6 +344,21 @@ namespace infra::binary_serialization
         {
         }
 
+        void bool_value(bool& b) noexcept
+        {
+            uint8_t v = 0xff; // invalid value: v != 0 && v != 1
+            value_impl<sizeof(uint8_t)>(&v);
+
+            // if (v != 0 && v != 1)
+            if ((v & 0b11111110) != 0)
+            {
+                // TODO check
+                return;
+            }
+
+            b = (v == 1);
+        }
+
         template<is_value T>
         void value(T& v) noexcept
         {
@@ -387,9 +397,13 @@ namespace infra::binary_serialization
         template<typename T>
         void operator>>(T& var) noexcept
         {
-            static_assert(is_value<T> || is_c_array<T> || is_structure<T>);
+            static_assert(is_bool<T> || is_value<T> || is_c_array<T> || is_structure<T>);
 
-            if constexpr (is_value<T>)
+            if constexpr (is_bool<T>)
+            {
+                bool_value(var);
+            }
+            else if constexpr (is_value<T>)
             {
                 value(var);
             }
@@ -489,11 +503,10 @@ namespace infra::binary_serialization
         // checksum
         decltype(std::declval<detail::Header>().checksum) checksum;
         reader.value(checksum);
-        auto& ref_arr = const_cast<ByteContainer&>(byte_array);
         checksum_t test_checksum = InitialChecksum;
-        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::MagicOffset, detail::MagicSize);
-        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataOffset, data_length);
-        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(ref_arr)) + detail::DataLengthOffset, detail::DataLengthSize);
+        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::MagicOffset, detail::MagicSize);
+        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataOffset, data_length);
+        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataLengthOffset, detail::DataLengthSize);
         if (test_checksum != checksum)
         {
             result.error = Error::ChecksumIncorrect;
@@ -506,3 +519,184 @@ namespace infra::binary_serialization
         return result;
     }
 }
+
+#pragma endregion HPP
+
+
+
+#pragma region CPP
+#ifdef INFRA_BINARY_SERIALIZATION_IMPL
+
+#include <array>
+
+#if INFRA_ARCH_X86
+    #if defined(_MSC_VER)
+        #include <intrin.h>
+    #else
+        #include <cpuid.h>
+    #endif
+    #include <nmmintrin.h>
+#elif INFRA_ARCH_ARM
+    #include <arm_acle.h>
+#endif
+
+namespace infra::binary_serialization
+{
+    static constexpr checksum_t CRC32C_POLY = 0x82F63B78;
+
+    static consteval std::array<checksum_t, 256> make_crc32c_table()
+    {
+        std::array<checksum_t, 256> table{};
+
+        for (checksum_t i = 0; i < 256; i++)
+        {
+            checksum_t c = i;
+            for (int j = 0; j < 8; j++)
+            {
+                if (c & 1)
+                    c = CRC32C_POLY ^ (c >> 1);
+                else
+                    c >>= 1;
+            }
+            table[i] = c;
+        }
+        return table;
+    }
+
+    static constexpr auto crc32c_table = make_crc32c_table();
+
+    // leaf: EAX, sub_leaf: ECX
+    static void cpuid(const uint32_t leaf, const uint32_t sub_leaf, uint32_t* abcd) noexcept
+    {
+    #if defined(_MSC_VER)
+        int regs[4];
+        __cpuidex(regs, static_cast<int>(leaf), static_cast<int>(sub_leaf));
+        for (int i = 0; i < 4; ++i)
+        {
+            abcd[i] = static_cast<uint32_t>(regs[i]);
+        }
+    #else
+        uint32_t a;
+        uint32_t b;
+        uint32_t c;
+        uint32_t d;
+        __cpuid_count(leaf, sub_leaf, a, b, c, d);
+        abcd[0] = a;
+        abcd[1] = b;
+        abcd[2] = c;
+        abcd[3] = d;
+    #endif
+    }
+
+    static checksum_t update_checksum_scalar(
+        checksum_t origin,
+        const uint8_t* data,
+        size_t size)
+    {
+        origin ^= 0xffffffffu;
+
+        for (size_t i = 0; i < size; i++)
+        {
+            uint8_t index = (origin ^ data[i]) & 0xff;
+            origin = (origin >> 8) ^ crc32c_table[index];
+        }
+
+        return origin ^ 0xffffffffu;
+    }
+
+#if INFRA_ARCH_X86
+    INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 static checksum_t update_checksum_x86(
+        checksum_t origin,
+        const uint8_t* data,
+        size_t size)
+    {
+        uint32_t crc = origin ^ 0xffffffffu;
+
+        size_t i = 0;
+
+        for (; i + 4 <= size; i += 4)
+        {
+            uint32_t v;
+            // 避免未对齐 UB
+            std::memcpy(&v, data + i, sizeof(uint32_t));
+            crc = _mm_crc32_u32(crc, v);
+        }
+
+        for (; i < size; i++)
+        {
+            crc = _mm_crc32_u8(crc, data[i]);
+        }
+
+        return crc ^ 0xffffffffu;
+    }
+#endif
+
+#if INFRA_ARCH_ARM
+    static checksum_t update_checksum_arm(
+        checksum_t origin,
+        const uint8_t* data,
+        size_t size)
+    {
+        uint32_t crc = origin ^ 0xffffffffu;
+
+        size_t i = 0;
+
+        for (; i + 4 <= size; i += 4)
+        {
+            uint32_t v;
+            std::memcpy(&v, data + i, sizeof(uint32_t)); // 避免未对齐 UB
+            crc = __crc32cw(crc, v);
+        }
+
+        for (; i < size; i++)
+        {
+            crc = __crc32cb(crc, data[i]);
+        }
+
+        return crc ^ 0xffffffffu;
+    }
+#endif
+
+    static bool support_crc32_intrinsic() noexcept
+    {
+    #if INFRA_ARCH_X86
+        uint32_t abcd[4]{};
+        cpuid(0, 0, abcd);
+        const uint32_t max_leaf = abcd[0];
+        if (max_leaf >= 1)
+        {
+            cpuid(1, 0, abcd);
+            // SSE4.2: EAX 1, ECX 20
+            const uint32_t ecx = abcd[2];
+            return (ecx & (1 << 20)) != 0;
+        }
+        return false;
+    #elif INFRA_ARCH_ARM
+        // TODO
+        return true;
+    #else
+        return false;
+    #endif
+    }
+
+    checksum_t update_checksum(checksum_t origin, const uint8_t* data, size_t size) noexcept
+    {
+        // 统一进行cpuid检查，如果支持使用原生指令进行计算，则使用，否则使用fallback标量版本
+        static bool support = support_crc32_intrinsic();
+        if (support) [[likely]]
+        {
+        #if INFRA_ARCH_X86
+            return update_checksum_x86(origin, data, size);
+        #elif INFRA_ARCH_ARM
+            return update_checksum_arm(origin, data, size);
+        #endif
+        }
+        else [[unlikely]]
+        {
+            return update_checksum_scalar(origin, data, size);
+        }
+    }
+} // namespace infra::binary_serialization
+
+#endif // INFRA_BINARY_SERIALIZATION_IMPL
+#pragma endregion CPP

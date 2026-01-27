@@ -204,21 +204,11 @@ namespace infra::binary_serialization
 
                 auto_resize(Bytes);
                 memcpy(adaptor_t::data(m_arr) + m_pos, src_copy, Bytes);
-                // m_crc32c_checksum = update_crc32c_checksum(
-                //     m_crc32c_checksum,
-                //     std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
-                //     Bytes
-                // );
             }
             else
             {
                 auto_resize(Bytes);
                 memcpy(adaptor_t::data(m_arr) + m_pos, src, Bytes);
-                // m_crc32c_checksum = update_crc32c_checksum(
-                //     m_crc32c_checksum,
-                //     std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
-                //     Bytes
-                // );
             }
 
             jump(m_pos + Bytes);
@@ -676,8 +666,8 @@ namespace infra::binary_serialization
 #endif
 
 #if INFRA_ARCH_ARM
-    static checksum_t update_crc32c_checksum_arm(
-        checksum_t origin,
+    static crc32c_t update_crc32c_checksum_arm(
+        crc32c_t origin,
         const uint8_t* data,
         size_t size) noexcept
     {

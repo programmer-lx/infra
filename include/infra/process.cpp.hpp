@@ -7,6 +7,10 @@
 
 #pragma region HPP
 
+#ifndef INFRA_PROCESS_API
+    #define INFRA_PROCESS_API
+#endif
+
 namespace infra::process
 {
 

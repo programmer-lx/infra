@@ -32,130 +32,21 @@
     } while (0)
 
 
-namespace test_detail
-{
-    constexpr infra::binary_serialization::crc32c_t CRC32C_POLY = 0x82F63B78;
-
-    consteval std::array<infra::binary_serialization::crc32c_t, 256> make_crc32c_table()
-    {
-        std::array<infra::binary_serialization::crc32c_t, 256> table{};
-
-        for (infra::binary_serialization::crc32c_t i = 0; i < 256; i++)
-        {
-            infra::binary_serialization::crc32c_t c = i;
-            for (int j = 0; j < 8; j++)
-            {
-                if (c & 1)
-                    c = CRC32C_POLY ^ (c >> 1);
-                else
-                    c >>= 1;
-            }
-            table[i] = c;
-        }
-        return table;
-    }
-
-    constexpr auto crc32c_table = make_crc32c_table();
-}
-
-infra::binary_serialization::crc32c_t test_update_checksum_scalar(
-    infra::binary_serialization::crc32c_t origin,
-    const uint8_t* data,
-    size_t size)
-{
-    origin ^= 0xffffffffu;
-
-    for (size_t i = 0; i < size; i++)
-    {
-        uint8_t index = (origin ^ data[i]) & 0xff;
-        origin = (origin >> 8) ^ test_detail::crc32c_table[index];
-    }
-
-    return origin ^ 0xffffffffu;
-}
-
-INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 infra::binary_serialization::crc32c_t test_update_checksum_x86(
-    infra::binary_serialization::crc32c_t origin,
-    const uint8_t* data,
-    size_t size)
-{
-#if !INFRA_ARCH_X86
-    (void)origin;
-    (void)data;
-    (void)size;
-    return 0;
-#else
-    uint32_t crc = origin ^ 0xffffffffu;
-
-    size_t i = 0;
-
-    // 先处理 4 字节块
-    for (; i + 4 <= size; i += 4)
-    {
-        uint32_t v;
-        // 避免未对齐访问 UB
-        std::memcpy(&v, data + i, sizeof(uint32_t));
-        crc = _mm_crc32_u32(crc, v);
-    }
-
-    // 处理剩余不足 4 字节
-    for (; i < size; i++)
-    {
-        crc = _mm_crc32_u8(crc, data[i]);
-    }
-
-    return crc ^ 0xffffffffu;
-#endif
-}
-
-infra::binary_serialization::crc32c_t test_update_checksum_arm(
-    infra::binary_serialization::crc32c_t origin,
-    const uint8_t* data,
-    size_t size)
-{
-#if !INFRA_ARCH_ARM
-    (void)origin;
-    (void)data;
-    (void)size;
-    return 0;
-#else
-    uint32_t crc = origin ^ 0xffffffffu;
-
-    size_t i = 0;
-
-    // 先处理 4 字节块
-    for (; i + 4 <= size; i += 4)
-    {
-        uint32_t v;
-        std::memcpy(&v, data + i, sizeof(uint32_t)); // 避免未对齐 UB
-        crc = __crc32cw(crc, v); // crc32c word
-    }
-
-    // 剩余不足 4 字节，用 byte 指令
-    for (; i < size; i++)
-    {
-        crc = __crc32cb(crc, data[i]); // crc32c byte
-    }
-
-    return crc ^ 0xffffffffu;
-#endif
-}
-
 #pragma region checksum_test
 
 void checksum_test_empty()
 {
     const uint8_t* data = nullptr;
     size_t size = 0;
-    auto scalar = test_update_checksum_scalar(0, data, size);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, size);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, size);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, size);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, size);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, size);
     ASSERT(scalar == arm);
 #endif
 }
@@ -163,15 +54,15 @@ void checksum_test_empty()
 void checksum_test_one_byte_zero()
 {
     uint8_t data[] = {0x00};
-    auto scalar = test_update_checksum_scalar(0, data, 1);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 1);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 1);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 1);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 1);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 1);
     ASSERT(scalar == arm);
 #endif
 }
@@ -179,15 +70,15 @@ void checksum_test_one_byte_zero()
 void checksum_test_one_byte_ff()
 {
     uint8_t data[] = {0xFF};
-    auto scalar = test_update_checksum_scalar(0, data, 1);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 1);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 1);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 1);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 1);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 1);
     ASSERT(scalar == arm);
 #endif
 }
@@ -195,15 +86,15 @@ void checksum_test_one_byte_ff()
 void checksum_test_pow2_4bytes()
 {
     uint8_t data[] = {0,1,2,3};
-    auto scalar = test_update_checksum_scalar(0, data, 4);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 4);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 4);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 4);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 4);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 4);
     ASSERT(scalar == arm);
 #endif
 }
@@ -213,15 +104,15 @@ void checksum_test_pow2_16bytes()
     uint8_t data[16];
     for (int i = 0; i < 16; ++i) data[i] = uint8_t(i);
 
-    auto scalar = test_update_checksum_scalar(0, data, 16);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 16);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 16);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 16);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 16);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 16);
     ASSERT(scalar == arm);
 #endif
 }
@@ -231,15 +122,15 @@ void checksum_test_pow2_32bytes()
     uint8_t data[32];
     for (int i = 0; i < 32; ++i) data[i] = uint8_t(i);
 
-    auto scalar = test_update_checksum_scalar(0, data, 32);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 32);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 32);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 32);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 32);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 32);
     ASSERT(scalar == arm);
 #endif
 }
@@ -247,15 +138,15 @@ void checksum_test_pow2_32bytes()
 void checksum_test_non_pow2_3bytes()
 {
     uint8_t data[] = {0x11, 0x22, 0x33};
-    auto scalar = test_update_checksum_scalar(0, data, 3);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 3);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 3);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 3);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 3);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 3);
     ASSERT(scalar == arm);
 #endif
 }
@@ -263,15 +154,15 @@ void checksum_test_non_pow2_3bytes()
 void checksum_test_non_pow2_7bytes()
 {
     uint8_t data[] = {1,2,3,4,5,6,7};
-    auto scalar = test_update_checksum_scalar(0, data, 7);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 7);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 7);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 7);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 7);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 7);
     ASSERT(scalar == arm);
 #endif
 }
@@ -279,15 +170,15 @@ void checksum_test_non_pow2_7bytes()
 void checksum_test_all_zero_64()
 {
     uint8_t data[64] = {};
-    auto scalar = test_update_checksum_scalar(0, data, 64);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 64);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 64);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 64);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 64);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 64);
     ASSERT(scalar == arm);
 #endif
 }
@@ -297,15 +188,15 @@ void checksum_test_all_ff_64()
     uint8_t data[64];
     memset(data, 0xFF, 64);
 
-    auto scalar = test_update_checksum_scalar(0, data, 64);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 64);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 64);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 64);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 64);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 64);
     ASSERT(scalar == arm);
 #endif
 }
@@ -314,15 +205,15 @@ void checksum_test_non_zero_origin()
 {
     uint8_t data[] = {1,2,3,4,5};
 
-    auto scalar = test_update_checksum_scalar(0xFFFFFFFF, data, 5);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0xFFFFFFFF, data, 5);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0xFFFFFFFF, data, 5);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0xFFFFFFFF, data, 5);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0xFFFFFFFF, data, 5);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0xFFFFFFFF, data, 5);
     ASSERT(scalar == arm);
 #endif
 }
@@ -332,20 +223,20 @@ void checksum_test_chunk_equivalence()
     uint8_t data[32];
     for (int i = 0; i < 32; ++i) data[i] = uint8_t(i);
 
-    auto full_scalar = test_update_checksum_scalar(0, data, 32);
+    auto full_scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 32);
 
-    auto part1 = test_update_checksum_scalar(0, data, 16);
-    auto part2 = test_update_checksum_scalar(part1, data + 16, 16);
+    auto part1 = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 16);
+    auto part2 = infra::binary_serialization::detail::update_crc32c_checksum_scalar(part1, data + 16, 16);
 
     ASSERT(full_scalar == part2);
 
 #if INFRA_ARCH_X86
-    auto full_x86 = test_update_checksum_x86(0, data, 32);
+    auto full_x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 32);
     ASSERT(full_scalar == full_x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto full_arm = test_update_checksum_arm(0, data, 32);
+    auto full_arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 32);
     ASSERT(full_scalar == full_arm);
 #endif
 }
@@ -355,15 +246,15 @@ void checksum_test_unaligned_pointer()
     uint8_t buffer[65];
     for (int i = 0; i < 65; ++i) buffer[i] = uint8_t(i);
 
-    auto scalar = test_update_checksum_scalar(0, buffer + 1, 64);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, buffer + 1, 64);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, buffer + 1, 64);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, buffer + 1, 64);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, buffer + 1, 64);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, buffer + 1, 64);
     ASSERT(scalar == arm);
 #endif
 }
@@ -373,15 +264,15 @@ void checksum_test_large_1024()
     uint8_t data[1024];
     for (int i = 0; i < 1024; ++i) data[i] = uint8_t(i * 7);
 
-    auto scalar = test_update_checksum_scalar(0, data, 1024);
+    auto scalar = infra::binary_serialization::detail::update_crc32c_checksum_scalar(0, data, 1024);
 
 #if INFRA_ARCH_X86
-    auto x86 = test_update_checksum_x86(0, data, 1024);
+    auto x86 = infra::binary_serialization::detail::update_crc32c_checksum_x86(0, data, 1024);
     ASSERT(scalar == x86);
 #endif
 
 #if INFRA_ARCH_ARM
-    auto arm = test_update_checksum_arm(0, data, 1024);
+    auto arm = infra::binary_serialization::detail::update_crc32c_checksum_arm(0, data, 1024);
     ASSERT(scalar == arm);
 #endif
 }

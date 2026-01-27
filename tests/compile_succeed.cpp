@@ -178,8 +178,8 @@ void unreachable_test()
 void assert_test()
 {
     [[maybe_unused]] int a = 1;
-    // INFRA_ASSERT(a != 1);
-    // INFRA_ASSERT_WITH_MSG(a != 1, "message");
+    // INFRA_DEBUG_ASSERT(a != 1);
+    // INFRA_DEBUG_ASSERT_WITH_MSG(a != 1, "message");
 }
 
 void cpu_test()

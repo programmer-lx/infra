@@ -34,15 +34,15 @@
 
 namespace test_detail
 {
-    constexpr infra::binary_serialization::checksum_t CRC32C_POLY = 0x82F63B78;
+    constexpr infra::binary_serialization::crc32c_t CRC32C_POLY = 0x82F63B78;
 
-    consteval std::array<infra::binary_serialization::checksum_t, 256> make_crc32c_table()
+    consteval std::array<infra::binary_serialization::crc32c_t, 256> make_crc32c_table()
     {
-        std::array<infra::binary_serialization::checksum_t, 256> table{};
+        std::array<infra::binary_serialization::crc32c_t, 256> table{};
 
-        for (infra::binary_serialization::checksum_t i = 0; i < 256; i++)
+        for (infra::binary_serialization::crc32c_t i = 0; i < 256; i++)
         {
-            infra::binary_serialization::checksum_t c = i;
+            infra::binary_serialization::crc32c_t c = i;
             for (int j = 0; j < 8; j++)
             {
                 if (c & 1)
@@ -58,8 +58,8 @@ namespace test_detail
     constexpr auto crc32c_table = make_crc32c_table();
 }
 
-infra::binary_serialization::checksum_t test_update_checksum_scalar(
-    infra::binary_serialization::checksum_t origin,
+infra::binary_serialization::crc32c_t test_update_checksum_scalar(
+    infra::binary_serialization::crc32c_t origin,
     const uint8_t* data,
     size_t size)
 {
@@ -74,8 +74,8 @@ infra::binary_serialization::checksum_t test_update_checksum_scalar(
     return origin ^ 0xffffffffu;
 }
 
-infra::binary_serialization::checksum_t test_update_checksum_x86(
-    infra::binary_serialization::checksum_t origin,
+INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 infra::binary_serialization::crc32c_t test_update_checksum_x86(
+    infra::binary_serialization::crc32c_t origin,
     const uint8_t* data,
     size_t size)
 {
@@ -108,8 +108,8 @@ infra::binary_serialization::checksum_t test_update_checksum_x86(
 #endif
 }
 
-infra::binary_serialization::checksum_t test_update_checksum_arm(
-    infra::binary_serialization::checksum_t origin,
+infra::binary_serialization::crc32c_t test_update_checksum_arm(
+    infra::binary_serialization::crc32c_t origin,
     const uint8_t* data,
     size_t size)
 {
@@ -554,10 +554,10 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = update_checksum(checksum, &buffer[detail::DataOffset], 16);
-        checksum = update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        crc32c_t checksum = update_crc32c_checksum(Initial_CRC32C, &buffer[detail::MagicOffset], detail::MagicSize);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataOffset], 16);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
         ASSERT(buffer[detail::DataLengthOffset + 0] == 0x10);
@@ -613,10 +613,10 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = update_checksum(checksum, &buffer[detail::DataOffset], 8);
-        checksum = update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        crc32c_t checksum = update_crc32c_checksum(Initial_CRC32C, &buffer[detail::MagicOffset], detail::MagicSize);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataOffset], 8);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
         ASSERT(buffer[detail::DataLengthOffset + 0] == 8); // 只有a能被序列化
@@ -677,23 +677,23 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = update_checksum(
-            InitialChecksum,
+        crc32c_t checksum = update_crc32c_checksum(
+            Initial_CRC32C,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataOffset],
             30 // data size
         );
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
         );
 
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length = 30 (0x1E)
         ASSERT(buffer[detail::DataLengthOffset + 0] == 0x1E);
@@ -788,23 +788,23 @@ void fixed_byte_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // ---- checksum ----
-        checksum_t checksum = update_checksum(
-            InitialChecksum,
+        crc32c_t checksum = update_crc32c_checksum(
+            Initial_CRC32C,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
         // truncated buffer
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataOffset],
             16+8+4
         );
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
         );
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // ---- data length truncated ----
         ASSERT(buffer[detail::DataLengthOffset + 0] == 16+8+4);
@@ -895,10 +895,10 @@ void dyn_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = update_checksum(checksum, &buffer[detail::DataOffset], 16);
-        checksum = update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        crc32c_t checksum = update_crc32c_checksum(Initial_CRC32C, &buffer[detail::MagicOffset], detail::MagicSize);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataOffset], 16);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length
         ASSERT(buffer[detail::DataLengthOffset + 0] == 0x10);
@@ -959,23 +959,23 @@ void dyn_array_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = update_checksum(
-            InitialChecksum,
+        crc32c_t checksum = update_crc32c_checksum(
+            Initial_CRC32C,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataOffset],
             30 // data size
         );
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
         );
 
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length = 30 (0x1E)
         ASSERT(buffer[detail::DataLengthOffset + 0] == 0x1E);
@@ -1115,26 +1115,26 @@ void char_arr_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // ---- checksum ----
-        checksum_t checksum = update_checksum(
-            InitialChecksum,
+        crc32c_t checksum = update_crc32c_checksum(
+            Initial_CRC32C,
             &buffer[detail::MagicOffset],
             detail::MagicSize
         );
 
         // data size
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataOffset],
             24
         );
 
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             &buffer[detail::DataLengthOffset],
             detail::DataLengthSize
         );
 
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // ---- data length ----
         ASSERT(buffer[detail::DataLengthOffset + 0] == 24); // no padding
@@ -1265,26 +1265,26 @@ void c_arr_test()
         ASSERT(*std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset + 3]) == detail::MagicValue[3]);
 
         // ---- checksum ----
-        checksum_t checksum = update_checksum(
-            InitialChecksum,
+        crc32c_t checksum = update_crc32c_checksum(
+            Initial_CRC32C,
             std::bit_cast<uint8_t*>(&buffer[detail::MagicOffset]),
             detail::MagicSize
         );
 
         // data size (no padding)
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             std::bit_cast<uint8_t*>(&buffer[detail::DataOffset]),
             sizeof(storage.a) + sizeof(storage.b) + sizeof(storage.c) + sizeof(storage.d)
         );
 
-        checksum = update_checksum(
+        checksum = update_crc32c_checksum(
             checksum,
             std::bit_cast<uint8_t*>(&buffer[detail::DataLengthOffset]),
             detail::DataLengthSize
         );
 
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // ---- deserialize test ----
         Storage_CArr back{};
@@ -1636,10 +1636,10 @@ void bool_test()
         ASSERT(buffer[detail::MagicOffset + 3] == detail::MagicValue[3]);
 
         // checksum
-        checksum_t checksum = update_checksum(InitialChecksum, &buffer[detail::MagicOffset], detail::MagicSize);
-        checksum = update_checksum(checksum, &buffer[detail::DataOffset], 14);
-        checksum = update_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
-        ASSERT(*reinterpret_cast<checksum_t*>(&buffer[detail::ChecksumOffset]) == checksum);
+        crc32c_t checksum = update_crc32c_checksum(Initial_CRC32C, &buffer[detail::MagicOffset], detail::MagicSize);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataOffset], 14);
+        checksum = update_crc32c_checksum(checksum, &buffer[detail::DataLengthOffset], detail::DataLengthSize);
+        ASSERT(*reinterpret_cast<crc32c_t*>(&buffer[detail::ChecksumOffset]) == checksum);
 
         // data length = 14 bytes (0x0E)
         ASSERT(buffer[detail::DataLengthOffset + 0] == 0x0E);

@@ -39,8 +39,8 @@ static_assert(CHAR_BIT == 8, "char bit MUST == 8");
  */
 namespace infra::binary_serialization
 {
-    using checksum_t = uint32_t;
-    static constexpr checksum_t InitialChecksum = 0;
+    using crc32c_t = uint32_t;
+    static constexpr crc32c_t Initial_CRC32C = 0;
 
     using data_length_t = uint32_t;
 
@@ -50,7 +50,7 @@ namespace infra::binary_serialization
         {
             uint8_t magic[4];
             data_length_t data_length;
-            checksum_t checksum;
+            crc32c_t checksum;
         };
         static_assert(sizeof(Header) == 12);
         INFRA_END_PACKED_STRUCT
@@ -63,14 +63,14 @@ namespace infra::binary_serialization
         static constexpr size_t DataLengthSize = sizeof(data_length_t);
 
         static constexpr size_t ChecksumOffset = offsetof(Header, checksum);
-        static constexpr size_t ChecksumSize = sizeof(checksum_t);
+        static constexpr size_t ChecksumSize = sizeof(crc32c_t);
 
         static constexpr size_t DataOffset = sizeof(Header);
         static_assert(DataOffset == 12);
     }
 
     // checksum
-    INFRA_BINARY_SERIALIZATION_API checksum_t update_checksum(checksum_t origin, const uint8_t* data, size_t size) noexcept;
+    INFRA_BINARY_SERIALIZATION_API crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept;
 
     template<typename T>
     concept is_bool = std::is_same_v<std::remove_cv_t<T>, bool>;
@@ -168,7 +168,11 @@ namespace infra::binary_serialization
     private:
         ByteContainer& m_arr;
         size_t m_pos;
-        checksum_t m_checksum = InitialChecksum;
+        crc32c_t m_crc32c_checksum = Initial_CRC32C;
+
+        // size_t m_crc32c_pos; // CRC32C的起始计算偏移量
+        // size_t m_crc32c_bytes = 0; // 不需要每一次序列化value的时候，都计算一次CRC32C，等到字节数累计达到64B的时候，再进行计算即可
+        // static constexpr size_t Desired_CRC32C_Bytes = 64;
 
         void auto_resize(size_t new_size) noexcept
         {
@@ -182,6 +186,20 @@ namespace infra::binary_serialization
                 }
             }
         }
+
+        // void force_calculate_crc32c() noexcept
+        // {
+        //     using adaptor_t = Adaptor<ByteContainer>;
+        //
+        //     m_crc32c_checksum = update_crc32c_checksum(
+        //         m_crc32c_checksum,
+        //         std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_crc32c_pos,
+        //         m_crc32c_bytes
+        //     );
+        //
+        //     m_crc32c_bytes = 0;
+        //     m_crc32c_pos = m_pos;
+        // }
 
         template<size_t Bytes>
         void value_impl(const void* src) noexcept
@@ -204,15 +222,21 @@ namespace infra::binary_serialization
 
                 auto_resize(Bytes);
                 memcpy(adaptor_t::data(m_arr) + m_pos, src_copy, Bytes);
-
-                update_checksum(src_copy, Bytes);
+                m_crc32c_checksum = update_crc32c_checksum(
+                    m_crc32c_checksum,
+                    std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
+                    Bytes
+                );
             }
             else
             {
                 auto_resize(Bytes);
                 memcpy(adaptor_t::data(m_arr) + m_pos, src, Bytes);
-
-                m_checksum = update_checksum(m_checksum, static_cast<const uint8_t*>(src), Bytes);
+                m_crc32c_checksum = update_crc32c_checksum(
+                    m_crc32c_checksum,
+                    std::bit_cast<uint8_t*>(adaptor_t::data(m_arr)) + m_pos,
+                    Bytes
+                );
             }
 
             jump(m_pos + Bytes);
@@ -234,9 +258,9 @@ namespace infra::binary_serialization
             return m_pos;
         }
 
-        [[nodiscard]] checksum_t checksum() const noexcept
+        [[nodiscard]] crc32c_t checksum() const noexcept
         {
-            return m_checksum;
+            return m_crc32c_checksum;
         }
 
         void bool_value(const bool& b) noexcept
@@ -460,14 +484,13 @@ namespace infra::binary_serialization
         writer.jump(detail::DataOffset);
         to_bytes(writer, object);
 
-
         // data length
         const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
         writer.jump(detail::DataLengthOffset);
         writer.value(data_length);
 
         // checksum
-        const checksum_t checksum = writer.checksum();
+        const crc32c_t checksum = writer.checksum();
         writer.jump(detail::ChecksumOffset);
         writer.value(checksum);
 
@@ -503,10 +526,10 @@ namespace infra::binary_serialization
         // checksum
         decltype(std::declval<detail::Header>().checksum) checksum;
         reader.value(checksum);
-        checksum_t test_checksum = InitialChecksum;
-        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::MagicOffset, detail::MagicSize);
-        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataOffset, data_length);
-        test_checksum = update_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataLengthOffset, detail::DataLengthSize);
+        crc32c_t test_checksum = Initial_CRC32C;
+        test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::MagicOffset, detail::MagicSize);
+        test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataOffset, data_length);
+        test_checksum = update_crc32c_checksum(test_checksum, std::bit_cast<uint8_t*>(SerializationDescriptor::data(byte_array)) + detail::DataLengthOffset, detail::DataLengthSize);
         if (test_checksum != checksum)
         {
             result.error = Error::ChecksumIncorrect;
@@ -542,15 +565,15 @@ namespace infra::binary_serialization
 
 namespace infra::binary_serialization
 {
-    static constexpr checksum_t CRC32C_POLY = 0x82F63B78;
+    static constexpr crc32c_t CRC32C_POLY = 0x82F63B78;
 
-    static consteval std::array<checksum_t, 256> make_crc32c_table()
+    static consteval std::array<crc32c_t, 256> make_crc32c_table()
     {
-        std::array<checksum_t, 256> table{};
+        std::array<crc32c_t, 256> table{};
 
-        for (checksum_t i = 0; i < 256; i++)
+        for (crc32c_t i = 0; i < 256; i++)
         {
-            checksum_t c = i;
+            crc32c_t c = i;
             for (int j = 0; j < 8; j++)
             {
                 if (c & 1)
@@ -588,10 +611,10 @@ namespace infra::binary_serialization
     #endif
     }
 
-    static checksum_t update_checksum_scalar(
-        checksum_t origin,
+    static crc32c_t update_crc32c_checksum_scalar(
+        crc32c_t origin,
         const uint8_t* data,
-        size_t size)
+        size_t size) noexcept
     {
         origin ^= 0xffffffffu;
 
@@ -605,10 +628,10 @@ namespace infra::binary_serialization
     }
 
 #if INFRA_ARCH_X86
-    INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 static checksum_t update_checksum_x86(
-        checksum_t origin,
+    INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 static crc32c_t update_crc32c_checksum_x86(
+        crc32c_t origin,
         const uint8_t* data,
-        size_t size)
+        size_t size) noexcept
     {
         uint32_t crc = origin ^ 0xffffffffu;
 
@@ -632,10 +655,10 @@ namespace infra::binary_serialization
 #endif
 
 #if INFRA_ARCH_ARM
-    static checksum_t update_checksum_arm(
+    static checksum_t update_crc32c_checksum_arm(
         checksum_t origin,
         const uint8_t* data,
-        size_t size)
+        size_t size) noexcept
     {
         uint32_t crc = origin ^ 0xffffffffu;
 
@@ -679,21 +702,21 @@ namespace infra::binary_serialization
     #endif
     }
 
-    checksum_t update_checksum(checksum_t origin, const uint8_t* data, size_t size) noexcept
+    crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept
     {
         // 统一进行cpuid检查，如果支持使用原生指令进行计算，则使用，否则使用fallback标量版本
         static bool support = support_crc32_intrinsic();
         if (support) [[likely]]
         {
         #if INFRA_ARCH_X86
-            return update_checksum_x86(origin, data, size);
+            return update_crc32c_checksum_x86(origin, data, size);
         #elif INFRA_ARCH_ARM
-            return update_checksum_arm(origin, data, size);
+            return update_crc32c_checksum_arm(origin, data, size);
         #endif
         }
         else [[unlikely]]
         {
-            return update_checksum_scalar(origin, data, size);
+            return update_crc32c_checksum_scalar(origin, data, size);
         }
     }
 } // namespace infra::binary_serialization

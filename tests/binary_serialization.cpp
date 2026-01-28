@@ -1400,6 +1400,166 @@ void error_test()
 }
 
 
+struct Storage_UserAbort_1
+{
+    uint32_t a;
+    uint32_t b;
+    uint32_t c[3][3][4][2];
+    Storage d[4][3][2];
+    bool e[3];
+    bool f;
+    std::vector<std::pair<Storage, bool>> g;
+};
+namespace infra::binary_serialization
+{
+    template<typename ByteContainer>
+    void from_bytes(
+        Reader<ByteContainer>& reader,
+        Storage_UserAbort_1& storage
+    )
+    {
+        ASSERT(reader.current_offset() == 12 + detail::DataOffset);
+        ASSERT(reader.result() == ResultCode::UserAbort);
+        reader >> storage.a;
+        ASSERT(reader.current_offset() == 12 + detail::DataOffset);
+        ASSERT(reader.result() == ResultCode::UserAbort);
+        reader >> storage.b;
+        ASSERT(reader.current_offset() == 12 + detail::DataOffset);
+        ASSERT(reader.result() == ResultCode::UserAbort);
+        reader >> storage.c;
+        ASSERT(reader.current_offset() == 12 + detail::DataOffset);
+        ASSERT(reader.result() == ResultCode::UserAbort);
+    }
+
+    template<typename ByteContainer>
+    void to_bytes(
+        Writer<ByteContainer>& writer,
+        const Storage_UserAbort_1& storage
+    )
+    {
+        ASSERT(writer.current_offset() == 12 + detail::DataOffset);
+        ASSERT(writer.result() == ResultCode::UserAbort);
+        writer << storage.a;
+        ASSERT(writer.current_offset() == 12 + detail::DataOffset);
+        ASSERT(writer.result() == ResultCode::UserAbort);
+        writer << storage.b;
+        ASSERT(writer.current_offset() == 12 + detail::DataOffset);
+        ASSERT(writer.result() == ResultCode::UserAbort);
+        writer << storage.c;
+        ASSERT(writer.current_offset() == 12 + detail::DataOffset);
+        ASSERT(writer.result() == ResultCode::UserAbort);
+    }
+}
+
+struct Storage_UserAbort_2
+{
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
+};
+namespace infra::binary_serialization
+{
+    template<typename ByteContainer>
+    void from_bytes(
+        Reader<ByteContainer>& reader,
+        Storage_UserAbort_2& storage
+    )
+    {
+        reader >> storage.a;
+        reader >> storage.b;
+        reader >> storage.c;
+    }
+
+    template<typename ByteContainer>
+    void to_bytes(
+        Writer<ByteContainer>& writer,
+        const Storage_UserAbort_2& storage
+    )
+    {
+        writer << storage.a;
+        writer << storage.b;
+        writer << storage.c;
+    }
+}
+
+struct Storage_UserAbort_3
+{
+    Storage_UserAbort_2 ab2;
+    Storage_UserAbort_1 ab1;
+};
+namespace infra::binary_serialization
+{
+    template<typename ByteContainer>
+    void from_bytes(
+        Reader<ByteContainer>& reader,
+        Storage_UserAbort_3& storage
+    )
+    {
+        reader >> storage.ab2;
+
+        reader.abort();
+        ASSERT(reader.result() == ResultCode::UserAbort);
+        reader >> storage.ab1;
+        ASSERT(reader.current_offset() == 12 + detail::DataOffset);
+    }
+
+    template<typename ByteContainer>
+    void to_bytes(
+        Writer<ByteContainer>& writer,
+        const Storage_UserAbort_3& storage
+    )
+    {
+        writer << storage.ab2;
+
+        writer.abort(); // offset == 12 + DataOffset == 24
+        ASSERT(writer.result() == ResultCode::UserAbort);
+        writer << storage.ab1;
+        ASSERT(writer.current_offset() == 12 + detail::DataOffset);
+    }
+}
+
+struct Storage_UserAbort
+{
+    Storage_UserAbort_3 ab3[5];
+};
+namespace infra::binary_serialization
+{
+    template<typename ByteContainer>
+    void from_bytes(
+        Reader<ByteContainer>& reader,
+        Storage_UserAbort& storage
+    )
+    {
+        reader >> storage.ab3;
+    }
+
+    template<typename ByteContainer>
+    void to_bytes(
+        Writer<ByteContainer>& writer,
+        const Storage_UserAbort& storage
+    )
+    {
+        writer << storage.ab3;
+    }
+}
+
+// 目的是测试多层递归序列化和反序列化，遇到错误，会不会终止之后的所有序列化过程
+// 通过current_offset来判断当前buffer指针的偏移量是否达到预期
+void user_abort_test()
+{
+    using namespace infra::binary_serialization;
+
+    Storage_UserAbort storage{}; // 无需填充了
+
+    std::vector<std::byte> buffer{};
+
+    serialize(buffer, storage);
+
+    Storage_UserAbort back{};
+    deserialize(buffer, back);
+}
+
+
 struct Storage_CustomStruct
 {
     std::u8string std_u8string;
@@ -1968,6 +2128,7 @@ int main()
         c_arr_test();
         custom_byte_type_test();
         error_test();
+        user_abort_test();
         custom_structure_test();
         bool_test();
         deserialize_from_file_test();

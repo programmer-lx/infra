@@ -275,6 +275,9 @@ namespace infra::binary_serialization
     template<typename ByteContainer>
     class Writer
     {
+        template<typename ByteContainer2, typename Object>
+        friend Result serialize(ByteContainer2&, const Object&);
+
     private:
         ByteContainer& m_arr;
         size_t m_pos = 0;
@@ -294,6 +297,11 @@ namespace infra::binary_serialization
             }
         }
 
+        void jump(size_t offset) noexcept
+        {
+            m_pos = offset;
+        }
+
         template<size_t Bytes>
         void value_impl(const void* src) noexcept
         {
@@ -303,23 +311,19 @@ namespace infra::binary_serialization
 
             using adaptor_t = Adaptor<ByteContainer>;
 
-            if constexpr (!adaptor_t::resizeable())
-            {
-                if (m_pos + Bytes > adaptor_t::size(m_arr))
-                {
-                    // 序列化不完整，只序列化了对象的部分字段
-                    m_result = ResultCode::IncompleteSerialization;
-                    return;
-                }
-            }
-
             auto_resize(Bytes);
+            if (m_pos + Bytes > adaptor_t::size(m_arr))
+            {
+                // 序列化不完整，只序列化了对象的部分字段
+                m_result = ResultCode::IncompleteSerialization;
+                return;
+            }
 
             void* dst = adaptor_t::data(m_arr) + m_pos;
             memcpy(dst, src, Bytes);
             endian::to_little(dst, Bytes);
 
-            internal_jump_(m_pos + Bytes);
+            jump(m_pos + Bytes);
         }
 
         void bool_value(const bool b) noexcept
@@ -367,18 +371,7 @@ namespace infra::binary_serialization
             }
         }
 
-    public:
-        explicit Writer(ByteContainer& arr)
-            : m_arr(arr)
-        {
-        }
-
-        [[nodiscard]] ResultCode internal_get_result_() const noexcept
-        {
-            return m_result;
-        }
-
-        void internal_update_checksum_(size_t offset, size_t size) noexcept
+        void update_checksum(size_t offset, size_t size) noexcept
         {
             using adaptor_t = Adaptor<ByteContainer>;
 
@@ -389,22 +382,27 @@ namespace infra::binary_serialization
             );
         }
 
-        void internal_jump_(size_t offset) noexcept
+    public:
+        explicit Writer(ByteContainer& arr)
+            : m_arr(arr)
         {
-            m_pos = offset;
         }
 
-        [[nodiscard]] size_t internal_current_offset_() const noexcept
+        [[nodiscard]] ResultCode result() const noexcept
+        {
+            return m_result;
+        }
+
+        [[nodiscard]] size_t current_offset() const noexcept
         {
             return m_pos;
         }
 
-        [[nodiscard]] crc32c_t internal_checksum_() const noexcept
+        [[nodiscard]] crc32c_t checksum() const noexcept
         {
             return m_crc32c_checksum;
         }
 
-    public:
         template<typename T>
         void operator<<(const T& var) noexcept
         {
@@ -437,6 +435,9 @@ namespace infra::binary_serialization
     template<typename ByteContainer>
     class Reader
     {
+        template<typename ByteContainer2, typename Object>
+        friend Result deserialize(const ByteContainer2&, Object&);
+
     private:
         const ByteContainer& m_arr;
         size_t m_pos = 0;
@@ -447,6 +448,7 @@ namespace infra::binary_serialization
         template<size_t Bytes>
         void value_impl(void* dst) noexcept
         {
+            // fail-fast
             if (m_result != ResultCode::OK)
                 return;
 
@@ -518,18 +520,7 @@ namespace infra::binary_serialization
             }
         }
 
-    public:
-        explicit Reader(const ByteContainer& arr)
-            : m_arr(arr)
-        {
-        }
-
-        [[nodiscard]] ResultCode internal_get_result_() const noexcept
-        {
-            return m_result;
-        }
-
-        void internal_update_checksum_(size_t offset, size_t size) noexcept
+        void update_checksum(size_t offset, size_t size) noexcept
         {
             using adaptor_t = Adaptor<ByteContainer>;
 
@@ -540,12 +531,27 @@ namespace infra::binary_serialization
             );
         }
 
-        [[nodiscard]] crc32c_t internal_checksum_() const noexcept
+    public:
+        explicit Reader(const ByteContainer& arr)
+            : m_arr(arr)
+        {
+        }
+
+        [[nodiscard]] ResultCode result() const noexcept
+        {
+            return m_result;
+        }
+
+        [[nodiscard]] crc32c_t checksum() const noexcept
         {
             return m_checksum;
         }
 
-    public:
+        [[nodiscard]] size_t current_offset() const noexcept
+        {
+            return m_pos;
+        }
+
         template<typename T>
         void operator>>(T& var) noexcept
         {
@@ -594,8 +600,8 @@ namespace infra::binary_serialization
 
         // save magic
         writer << detail::MagicValue;
-        writer.internal_update_checksum_(detail::MagicOffset, detail::MagicSize);
-        ResultCode result_code = writer.internal_get_result_();
+        writer.update_checksum(detail::MagicOffset, detail::MagicSize);
+        ResultCode result_code = writer.result();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
@@ -606,33 +612,33 @@ namespace infra::binary_serialization
         // checksum (写完数据后再填充)
 
         // data
-        writer.internal_jump_(detail::DataOffset);
+        writer.jump(detail::DataOffset);
         writer << object;
-        result_code = writer.internal_get_result_();
+        result_code = writer.result();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
             return result;
         }
-        const data_length_t data_length = static_cast<data_length_t>(writer.internal_current_offset_() - detail::DataOffset);
-        writer.internal_update_checksum_(detail::DataOffset, static_cast<size_t>(data_length));
+        const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
+        writer.update_checksum(detail::DataOffset, static_cast<size_t>(data_length));
 
         // data length
-        writer.internal_jump_(detail::DataLengthOffset);
+        writer.jump(detail::DataLengthOffset);
         writer << data_length;
-        result_code = writer.internal_get_result_();
+        result_code = writer.result();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
             return result;
         }
-        writer.internal_update_checksum_(detail::DataLengthOffset, detail::DataLengthSize);
+        writer.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
 
         // checksum
-        const crc32c_t checksum = writer.internal_checksum_();
-        writer.internal_jump_(detail::ChecksumOffset);
+        const crc32c_t checksum = writer.checksum();
+        writer.jump(detail::ChecksumOffset);
         writer << checksum;
-        result_code = writer.internal_get_result_();
+        result_code = writer.result();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
@@ -682,10 +688,10 @@ namespace infra::binary_serialization
         decltype(std::declval<detail::Header>().checksum) checksum = Initial_CRC32C;
         reader >> checksum;
 
-        reader.internal_update_checksum_(detail::MagicOffset, detail::MagicSize);
-        reader.internal_update_checksum_(detail::DataOffset, data_length);
-        reader.internal_update_checksum_(detail::DataLengthOffset, detail::DataLengthSize);
-        if (reader.internal_checksum_() != checksum)
+        reader.update_checksum(detail::MagicOffset, detail::MagicSize);
+        reader.update_checksum(detail::DataOffset, data_length);
+        reader.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
+        if (reader.checksum() != checksum)
         {
             result.code = ResultCode::ChecksumIncorrect;
             return result;
@@ -693,7 +699,7 @@ namespace infra::binary_serialization
 
         // data
         reader >> object;
-        const ResultCode result_code = reader.internal_get_result_();
+        const ResultCode result_code = reader.result();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;

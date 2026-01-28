@@ -4,8 +4,8 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <infra/enum_util.hpp>
 #include <infra/common.hpp>
+#include <infra/enums.hpp>
 
 #define ASSERT(exp) \
     do { \
@@ -20,7 +20,7 @@ enum class GlobalFlags : uint32_t {
     Bit0  = 1 << 0,
     Bit1  = 1 << 1
 };
-INFRA_ENUM_ENABLE_BITMASK_OPERATORS(GlobalFlags)
+INFRA_ENUMS_ENABLE_BITMASK_OPERATORS(GlobalFlags)
 
 // --- 测试 2: 有命名空间 ---
 namespace Graphics {
@@ -31,7 +31,7 @@ namespace Graphics {
         AA      = 1 << 2
     };
     // 在同一个命名空间内注入
-    INFRA_ENUM_ENABLE_BITMASK_OPERATORS(RenderMode)
+    INFRA_ENUMS_ENABLE_BITMASK_OPERATORS(RenderMode)
 }
 
 // ==============================
@@ -101,11 +101,17 @@ void test_namespace_enum() {
     ASSERT(7 != mode);
 }
 
+void test_functions()
+{
+    static_assert(infra::enums::to_int(Graphics::RenderMode::AA) == 4);
+}
+
 
 void test()
 {
     test_global_enum();
     test_namespace_enum();
+    test_functions();
 }
 
 

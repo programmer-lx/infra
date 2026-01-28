@@ -1,7 +1,18 @@
 #pragma once
+
 #include <type_traits>
 
-#define INFRA_ENUM_ENABLE_BITMASK_OPERATORS(Enum) \
+namespace infra::enums
+{
+    template<typename Enum>
+        requires std::is_enum_v<Enum>
+    constexpr std::underlying_type_t<Enum> to_int(const Enum e) noexcept
+    {
+        return static_cast<std::underlying_type_t<Enum>>(e);
+    }
+}
+
+#define INFRA_ENUMS_ENABLE_BITMASK_OPERATORS(Enum) \
     /* 1. 一元运算符: ~Enum */ \
     inline constexpr Enum operator~(Enum value) noexcept { \
         using T = std::underlying_type_t<Enum>; \

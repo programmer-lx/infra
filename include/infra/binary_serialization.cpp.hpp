@@ -310,20 +310,11 @@ namespace infra::binary_serialization
                 }
             }
 
-            if constexpr (endian::Current == endian::Endian::Big)
-            {
-                uint8_t src_copy[Bytes] = {};
-                memcpy(src_copy, src, Bytes);
-                endian::to_little(src_copy, Bytes);
+            auto_resize(Bytes);
 
-                auto_resize(Bytes);
-                memcpy(adaptor_t::data(m_arr) + m_pos, src_copy, Bytes);
-            }
-            else
-            {
-                auto_resize(Bytes);
-                memcpy(adaptor_t::data(m_arr) + m_pos, src, Bytes);
-            }
+            void* dst = adaptor_t::data(m_arr) + m_pos;
+            memcpy(dst, src, Bytes);
+            endian::to_little(dst, Bytes);
 
             jump(m_pos + Bytes);
         }
@@ -458,18 +449,8 @@ namespace infra::binary_serialization
                 return;
             }
 
-            if constexpr (endian::Current == endian::Endian::Big)
-            {
-                uint8_t src_copy[Bytes] = {};
-                memcpy(src_copy, adaptor_t::data(m_arr) + m_pos, Bytes);
-                endian::to_little(src_copy, Bytes);
-
-                memcpy(dst, src_copy, Bytes);
-            }
-            else
-            {
-                memcpy(dst, adaptor_t::data(m_arr) + m_pos, Bytes);
-            }
+            memcpy(dst, adaptor_t::data(m_arr) + m_pos, Bytes);
+            endian::to_little(dst, Bytes);
 
             m_pos += Bytes;
         }

@@ -1858,33 +1858,50 @@ void deserialize_from_file_test()
     ASSERT(back.u16 == 0xABCD);
 
     // --- Integer Arrays ---
-    ASSERT(back.arr_u32[0] == 100);
-    ASSERT(back.arr_i64[1][1] == -4);
-    ASSERT(back.arr_u16[2] == 30);
+    ASSERT(back.arr_u32[0] == 100); ASSERT(back.arr_u32[1] == 200);
+    ASSERT(back.arr_i64[0][0] == -1); ASSERT(back.arr_i64[0][1] == -2);
+    ASSERT(back.arr_i64[1][0] == -3); ASSERT(back.arr_i64[1][1] == -4);
+    ASSERT(back.arr_u16[0] == 10); ASSERT(back.arr_u16[1] == 20); ASSERT(back.arr_u16[2] == 30);
 
     // --- SubFile (Object) ---
     ASSERT(back.subfile.str == "Hello SubFile");
-    ASSERT(back.subfile.map.at("one").first == 1);
-    ASSERT(back.subfile.map.at("two").second == false);
+    ASSERT(back.subfile.map.at("one").first == 1); ASSERT(back.subfile.map.at("one").second == true);
+    ASSERT(back.subfile.map.at("two").first == 2); ASSERT(back.subfile.map.at("two").second == false);
 
     // --- Vector<SubFile> ---
     ASSERT(back.vec_subfile.size() == 2);
+    ASSERT(back.vec_subfile[0].str == "Hello SubFile");
+    ASSERT(back.vec_subfile[0].map.at("one").first == 1); ASSERT(back.vec_subfile[0].map.at("one").second == true);
+    ASSERT(back.vec_subfile[0].map.at("two").first == 2); ASSERT(back.vec_subfile[0].map.at("two").second == false);
+
     ASSERT(back.vec_subfile[1].str == "Second");
-    ASSERT(back.vec_subfile[1].map.at("three").first == 3);
+    ASSERT(back.vec_subfile[1].map.at("three").first == 3); ASSERT(back.vec_subfile[1].map.at("three").second == true);
+
 
     // --- Map<string, SubFile> ---
     ASSERT(back.map_subfile.size() == 2);
     ASSERT(back.map_subfile.at("first").str == "Hello SubFile");
-    ASSERT(back.map_subfile.at("second").map.at("four").first == 4);
+    ASSERT(back.map_subfile.at("first").map.at("one").first == 1); ASSERT(back.map_subfile.at("first").map.at("one").second == true);
+    ASSERT(back.map_subfile.at("first").map.at("two").first == 2); ASSERT(back.map_subfile.at("first").map.at("two").second == false);
+
+    ASSERT(back.map_subfile.at("second").str == "MapSecond");
+    ASSERT(back.map_subfile.at("second").map.at("four").first == 4); ASSERT(back.map_subfile.at("second").map.at("four").second == false);
 
     // --- Vector<uint32_t> ---
     ASSERT(back.vec_u32.size() == 4);
+    ASSERT(back.vec_u32[0] == 10);
+    ASSERT(back.vec_u32[1] == 20);
+    ASSERT(back.vec_u32[2] == 30);
     ASSERT(back.vec_u32[3] == 40);
 
     // --- Char Arrays ---
-    ASSERT(back.char_arr[0] == 'a' && back.char_arr[2] == 'c');
+    ASSERT(back.char_arr[0] == 'a');
+    ASSERT(back.char_arr[1] == 'b');
+    ASSERT(back.char_arr[2] == 'c');
+
     ASSERT(back.char16_arr[0] == u'你');
     ASSERT(back.char16_arr[1] == u'好');
+
     ASSERT(back.char32_arr[0] == U'界');
     ASSERT(back.char32_arr[1] == U'！');
 }

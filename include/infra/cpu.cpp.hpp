@@ -359,10 +359,10 @@ namespace infra::cpu
     void pause() noexcept
     {
     #if INFRA_ARCH_X86_32 // 32bit操作系统需要判断是否支持SSE2指令
-        const Info& cpu_info = info();
-        if (cpu_info.sse2)
+        const static bool sse2 = info().sse2;
+        if (sse2)
         {
-            cpu_pause_impl_x86_32();
+            detail::cpu_pause_impl_x86_32();
         }
     #elif INFRA_ARCH_X86_64 // 64bit操作系统默认支持SSE2指令
         _mm_pause();

@@ -137,8 +137,7 @@ namespace infra::binary_serialization
     INFRA_HEADER_GLOBAL crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept
     {
         // 统一进行cpuid检查，如果支持使用原生指令进行计算，则使用，否则使用fallback标量版本
-        static bool support = detail::support_crc32_intrinsic();
-        if (support) [[likely]]
+        if (detail::support_crc32_intrinsic()) [[likely]]
         {
         #if INFRA_ARCH_X86
             return detail::update_crc32c_checksum_x86(origin, data, size);
@@ -815,7 +814,7 @@ namespace infra::binary_serialization
         }
 #endif
 
-        bool support_crc32_intrinsic() noexcept
+        static bool support_crc32_intrinsic_impl() noexcept
         {
         #if INFRA_ARCH_X86
             uint32_t abcd[4]{};
@@ -835,6 +834,12 @@ namespace infra::binary_serialization
         #else
             return false;
         #endif
+        }
+
+        bool support_crc32_intrinsic() noexcept
+        {
+            static bool result = support_crc32_intrinsic_impl();
+            return result;
         }
     }
 } // namespace infra::binary_serialization

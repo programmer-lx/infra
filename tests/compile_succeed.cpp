@@ -188,6 +188,8 @@ void cpu_test()
     while (i--)
     {
         infra::cpu::pause();
+        infra::cpu::pause();
+        infra::cpu::pause();
     }
 }
 

@@ -236,6 +236,7 @@ namespace infra::binary_serialization
         ByteContainerTooSmall,              // byte_container的容量比文件要小，或者是文件的data_length字段出现错误
         MagicNumberIncorrect,               // magic number 错误
         ChecksumIncorrect,                  // CRC32C校验失败
+        UserAbort                           // 用户手动终止序列化或反序列化
     };
 
     struct Result
@@ -318,7 +319,7 @@ namespace infra::binary_serialization
             memcpy(dst, src, Bytes);
             endian::to_little(dst, Bytes);
 
-            jump(m_pos + Bytes);
+            internal_jump_(m_pos + Bytes);
         }
 
         void bool_value(const bool b) noexcept
@@ -372,12 +373,12 @@ namespace infra::binary_serialization
         {
         }
 
-        [[nodiscard]] ResultCode get_result() const noexcept
+        [[nodiscard]] ResultCode internal_get_result_() const noexcept
         {
             return m_result;
         }
 
-        void update_checksum(size_t offset, size_t size) noexcept
+        void internal_update_checksum_(size_t offset, size_t size) noexcept
         {
             using adaptor_t = Adaptor<ByteContainer>;
 
@@ -388,21 +389,22 @@ namespace infra::binary_serialization
             );
         }
 
-        void jump(size_t offset) noexcept
+        void internal_jump_(size_t offset) noexcept
         {
             m_pos = offset;
         }
 
-        [[nodiscard]] size_t current_offset() const noexcept
+        [[nodiscard]] size_t internal_current_offset_() const noexcept
         {
             return m_pos;
         }
 
-        [[nodiscard]] crc32c_t checksum() const noexcept
+        [[nodiscard]] crc32c_t internal_checksum_() const noexcept
         {
             return m_crc32c_checksum;
         }
 
+    public:
         template<typename T>
         void operator<<(const T& var) noexcept
         {
@@ -424,6 +426,11 @@ namespace infra::binary_serialization
             {
                 structure(var);
             }
+        }
+
+        void abort() noexcept
+        {
+            m_result = ResultCode::UserAbort;
         }
     };
 
@@ -517,12 +524,12 @@ namespace infra::binary_serialization
         {
         }
 
-        [[nodiscard]] ResultCode get_result() const noexcept
+        [[nodiscard]] ResultCode internal_get_result_() const noexcept
         {
             return m_result;
         }
 
-        void update_checksum(size_t offset, size_t size) noexcept
+        void internal_update_checksum_(size_t offset, size_t size) noexcept
         {
             using adaptor_t = Adaptor<ByteContainer>;
 
@@ -533,11 +540,12 @@ namespace infra::binary_serialization
             );
         }
 
-        [[nodiscard]] crc32c_t checksum() const noexcept
+        [[nodiscard]] crc32c_t internal_checksum_() const noexcept
         {
             return m_checksum;
         }
 
+    public:
         template<typename T>
         void operator>>(T& var) noexcept
         {
@@ -560,6 +568,11 @@ namespace infra::binary_serialization
                 structure(var);
             }
         }
+
+        void abort() noexcept
+        {
+            m_result = ResultCode::UserAbort;
+        }
     };
 
     template<typename ByteContainer, typename Object>
@@ -581,8 +594,8 @@ namespace infra::binary_serialization
 
         // save magic
         writer << detail::MagicValue;
-        writer.update_checksum(detail::MagicOffset, detail::MagicSize);
-        ResultCode result_code = writer.get_result();
+        writer.internal_update_checksum_(detail::MagicOffset, detail::MagicSize);
+        ResultCode result_code = writer.internal_get_result_();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
@@ -593,33 +606,33 @@ namespace infra::binary_serialization
         // checksum (写完数据后再填充)
 
         // data
-        writer.jump(detail::DataOffset);
+        writer.internal_jump_(detail::DataOffset);
         writer << object;
-        result_code = writer.get_result();
+        result_code = writer.internal_get_result_();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
             return result;
         }
-        const data_length_t data_length = static_cast<data_length_t>(writer.current_offset() - detail::DataOffset);
-        writer.update_checksum(detail::DataOffset, static_cast<size_t>(data_length));
+        const data_length_t data_length = static_cast<data_length_t>(writer.internal_current_offset_() - detail::DataOffset);
+        writer.internal_update_checksum_(detail::DataOffset, static_cast<size_t>(data_length));
 
         // data length
-        writer.jump(detail::DataLengthOffset);
+        writer.internal_jump_(detail::DataLengthOffset);
         writer << data_length;
-        result_code = writer.get_result();
+        result_code = writer.internal_get_result_();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
             return result;
         }
-        writer.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
+        writer.internal_update_checksum_(detail::DataLengthOffset, detail::DataLengthSize);
 
         // checksum
-        const crc32c_t checksum = writer.checksum();
-        writer.jump(detail::ChecksumOffset);
+        const crc32c_t checksum = writer.internal_checksum_();
+        writer.internal_jump_(detail::ChecksumOffset);
         writer << checksum;
-        result_code = writer.get_result();
+        result_code = writer.internal_get_result_();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;
@@ -669,10 +682,10 @@ namespace infra::binary_serialization
         decltype(std::declval<detail::Header>().checksum) checksum = Initial_CRC32C;
         reader >> checksum;
 
-        reader.update_checksum(detail::MagicOffset, detail::MagicSize);
-        reader.update_checksum(detail::DataOffset, data_length);
-        reader.update_checksum(detail::DataLengthOffset, detail::DataLengthSize);
-        if (reader.checksum() != checksum)
+        reader.internal_update_checksum_(detail::MagicOffset, detail::MagicSize);
+        reader.internal_update_checksum_(detail::DataOffset, data_length);
+        reader.internal_update_checksum_(detail::DataLengthOffset, detail::DataLengthSize);
+        if (reader.internal_checksum_() != checksum)
         {
             result.code = ResultCode::ChecksumIncorrect;
             return result;
@@ -680,7 +693,7 @@ namespace infra::binary_serialization
 
         // data
         reader >> object;
-        const ResultCode result_code = reader.get_result();
+        const ResultCode result_code = reader.internal_get_result_();
         if (result_code != ResultCode::OK)
         {
             result.code = result_code;

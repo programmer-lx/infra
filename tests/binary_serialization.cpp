@@ -2,6 +2,8 @@
 #include <cstddef>
 #include <cstdlib>
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <array>
 #include <bit>
@@ -9,6 +11,7 @@
 #include <stdexcept>
 #include <random>
 
+#include "test_config.hpp"
 #include "test_utils.hpp"
 
 #include <infra/common.hpp>
@@ -493,6 +496,11 @@ namespace infra::binary_serialization
     }
 }
 
+struct OneByteStruct
+{
+    uint8_t v;
+};
+
 void traits_test()
 {
     using namespace infra::binary_serialization;
@@ -512,6 +520,9 @@ void traits_test()
 
     static_assert(is_structure<Storage>);
     static_assert(!is_structure<int>);
+
+    static_assert(!is_1byte<bool>);
+    static_assert(!is_1byte<OneByteStruct>);
 
     static_assert(sizeof(int[3][4])== sizeof(int) * 12);
 
@@ -1615,6 +1626,269 @@ void bool_test()
     }
 }
 
+
+struct Storage_SubFile
+{
+    std::string str;
+    std::map<std::string, std::pair<uint32_t, bool>> map;
+};
+
+namespace infra::binary_serialization
+{
+    template<typename ByteContainer>
+    void from_bytes(
+        Reader<ByteContainer>& reader,
+        Storage_SubFile& storage
+    )
+    {
+        reader >> storage.str;
+        reader >> storage.map;
+    }
+
+    template<typename ByteContainer>
+    void to_bytes(
+        Writer<ByteContainer>& writer,
+        const Storage_SubFile& storage
+    )
+    {
+        writer << storage.str;
+        writer << storage.map;
+    }
+}
+
+struct Storage_File
+{
+    // 1. bool变量 + bool C数组
+    bool flag1;
+    bool flag2;
+    bool arr_bool[2][3];
+
+    // 2. 整型变量及C数组
+    uint32_t u32;
+    int64_t i64;
+    uint16_t u16;
+
+    uint32_t arr_u32[2];
+    int64_t arr_i64[2][2];
+    uint16_t arr_u16[3];
+
+    // 3. 子结构体
+    Storage_SubFile subfile;
+    std::vector<Storage_SubFile> vec_subfile;
+    std::map<std::string, Storage_SubFile> map_subfile;
+
+    // 4. vector<uint32_t>
+    std::vector<uint32_t> vec_u32;
+
+    // 5. 字符数组
+    char char_arr[3];
+    char16_t char16_arr[2];
+    char32_t char32_arr[2];
+};
+
+namespace infra::binary_serialization
+{
+    template<typename ByteContainer>
+    void from_bytes(
+        Reader<ByteContainer>& reader,
+        Storage_File& storage
+    )
+    {
+        // bool
+        reader >> storage.flag1;
+        reader >> storage.flag2;
+        reader >> storage.arr_bool;
+
+        // integral types
+        reader >> storage.u32;
+        reader >> storage.i64;
+        reader >> storage.u16;
+
+        reader >> storage.arr_u32;
+        reader >> storage.arr_i64;
+        reader >> storage.arr_u16;
+
+        // SubFile
+        reader >> storage.subfile;
+        reader >> storage.vec_subfile;
+        reader >> storage.map_subfile;
+
+        // vector<uint32_t>
+        reader >> storage.vec_u32;
+
+        // char arrays
+        reader >> storage.char_arr;
+        reader >> storage.char16_arr;
+        reader >> storage.char32_arr;
+    }
+
+    template<typename ByteContainer>
+    void to_bytes(
+        Writer<ByteContainer>& writer,
+        const Storage_File& storage
+    )
+    {
+        // bool
+        writer << storage.flag1;
+        writer << storage.flag2;
+        writer << storage.arr_bool;
+
+        // integral types
+        writer << storage.u32;
+        writer << storage.i64;
+        writer << storage.u16;
+
+        writer << storage.arr_u32;
+        writer << storage.arr_i64;
+        writer << storage.arr_u16;
+
+        // SubFile
+        writer << storage.subfile;
+        writer << storage.vec_subfile;
+        writer << storage.map_subfile;
+
+        // vector<uint32_t>
+        writer << storage.vec_u32;
+
+        // char arrays
+        writer << storage.char_arr;
+        writer << storage.char16_arr;
+        writer << storage.char32_arr;
+    }
+}
+
+
+// write_to_file函数示例
+void write_to_file()
+{
+    namespace fs = std::filesystem;
+    // 假设 INFRA_TEST_EXE_DIR 已经定义
+    fs::path file_path = fs::path(INFRA_TEST_EXE_DIR) / "test_file.bin";
+
+    Storage_File storage{};
+
+    // 1. bool 变量及 C 数组
+    storage.flag1 = true;
+    storage.flag2 = false;
+    // arr_bool[2][3]
+    storage.arr_bool[0][0] = true;  storage.arr_bool[0][1] = false; storage.arr_bool[0][2] = true;
+    storage.arr_bool[1][0] = false; storage.arr_bool[1][1] = true;  storage.arr_bool[1][2] = false;
+
+    // 2. 整型变量及 C 数组
+    storage.u32 = 0x12345678;
+    storage.i64 = 0x1122334455667788LL;
+    storage.u16 = 0xABCD;
+
+    storage.arr_u32[0] = 100; storage.arr_u32[1] = 200;
+    storage.arr_i64[0][0] = -1; storage.arr_i64[0][1] = -2;
+    storage.arr_i64[1][0] = -3; storage.arr_i64[1][1] = -4;
+    storage.arr_u16[0] = 10; storage.arr_u16[1] = 20; storage.arr_u16[2] = 30;
+
+    // 3. 子结构体填充 (沿用你的逻辑)
+    storage.subfile.str = "Hello SubFile";
+    storage.subfile.map["one"] = {1, true};
+    storage.subfile.map["two"] = {2, false};
+
+    storage.vec_subfile.push_back(storage.subfile);
+    storage.vec_subfile.push_back({ "Second", {{"three",{3,true}}} });
+
+    storage.map_subfile["first"] = storage.subfile;
+    storage.map_subfile["second"] = { "MapSecond", {{"four",{4,false}}} };
+
+    // 4. vector<uint32_t>
+    storage.vec_u32 = {10, 20, 30, 40};
+
+    // 5. 字符数组
+    storage.char_arr[0] = 'a';
+    storage.char_arr[1] = 'b';
+    storage.char_arr[2] = 'c';
+    storage.char16_arr[0] = u'你';
+    storage.char16_arr[1] = u'好';
+    storage.char32_arr[0] = U'界';
+    storage.char32_arr[1] = U'！';
+
+    // 序列化并写入文件
+    std::vector<std::byte> buffer{};
+    auto result = infra::binary_serialization::serialize(buffer, storage);
+    ASSERT(result);
+
+    std::ofstream out(file_path, std::ios::binary | std::ios::out);
+    ASSERT(out.is_open());
+    out.write(reinterpret_cast<const char*>(buffer.data()), static_cast<std::streamsize>(buffer.size() * sizeof(std::byte)));
+    out.close();
+    std::cout << "Successfully wrote to: " << file_path << std::endl;
+}
+
+void deserialize_from_file_test()
+{
+    // write_to_file();
+
+    namespace fs = std::filesystem;
+    fs::path file_path = fs::path(INFRA_TEST_EXE_DIR) / "test_file.bin";
+
+    // 1. 读取文件内容到 buffer
+    std::ifstream in(file_path, std::ios::binary | std::ios::in);
+    ASSERT(in.is_open());
+
+    in.seekg(0, std::ios::end);
+    size_t fileSize = in.tellg();
+    in.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> buffer(fileSize);
+    in.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(fileSize));
+    in.close();
+
+    // 2. 执行反序列化
+    Storage_File back{};
+    auto result = infra::binary_serialization::deserialize(buffer, back);
+
+    ASSERT(result.code == infra::binary_serialization::ResultCode::OK);
+
+    // 3. 字段验证
+
+    // --- Bool & Bool Arrays ---
+    ASSERT(back.flag1 == true);
+    ASSERT(back.flag2 == false);
+    ASSERT(back.arr_bool[0][0] == true);  ASSERT(back.arr_bool[0][1] == false); ASSERT(back.arr_bool[0][2] == true);
+    ASSERT(back.arr_bool[1][0] == false); ASSERT(back.arr_bool[1][1] == true);  ASSERT(back.arr_bool[1][2] == false);
+
+    // --- Integers ---
+    ASSERT(back.u32 == 0x12345678);
+    ASSERT(back.i64 == 0x1122334455667788LL);
+    ASSERT(back.u16 == 0xABCD);
+
+    // --- Integer Arrays ---
+    ASSERT(back.arr_u32[0] == 100);
+    ASSERT(back.arr_i64[1][1] == -4);
+    ASSERT(back.arr_u16[2] == 30);
+
+    // --- SubFile (Object) ---
+    ASSERT(back.subfile.str == "Hello SubFile");
+    ASSERT(back.subfile.map.at("one").first == 1);
+    ASSERT(back.subfile.map.at("two").second == false);
+
+    // --- Vector<SubFile> ---
+    ASSERT(back.vec_subfile.size() == 2);
+    ASSERT(back.vec_subfile[1].str == "Second");
+    ASSERT(back.vec_subfile[1].map.at("three").first == 3);
+
+    // --- Map<string, SubFile> ---
+    ASSERT(back.map_subfile.size() == 2);
+    ASSERT(back.map_subfile.at("first").str == "Hello SubFile");
+    ASSERT(back.map_subfile.at("second").map.at("four").first == 4);
+
+    // --- Vector<uint32_t> ---
+    ASSERT(back.vec_u32.size() == 4);
+    ASSERT(back.vec_u32[3] == 40);
+
+    // --- Char Arrays ---
+    ASSERT(back.char_arr[0] == 'a' && back.char_arr[2] == 'c');
+    ASSERT(back.char16_arr[0] == u'你');
+    ASSERT(back.char16_arr[1] == u'好');
+    ASSERT(back.char32_arr[0] == U'界');
+    ASSERT(back.char32_arr[1] == U'！');
+}
+
 int main()
 {
     try
@@ -1628,6 +1902,7 @@ int main()
         error_test();
         custom_structure_test();
         bool_test();
+        deserialize_from_file_test();
     }
     catch (std::exception& e)
     {

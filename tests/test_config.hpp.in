@@ -1,0 +1,3 @@
+#pragma once
+
+#define INFRA_TEST_EXE_DIR "${CMAKE_CURRENT_BINARY_DIR}"

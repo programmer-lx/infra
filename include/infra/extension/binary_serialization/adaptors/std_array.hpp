@@ -10,8 +10,6 @@ namespace infra::binary_serialization
     struct Adaptor<std::array<ByteType, N>>
     {
         using byte_type = ByteType;
-        using writer_type = Writer<std::array<ByteType, N>>;
-        using reader_type = Reader<std::array<ByteType, N>>;
 
         static constexpr bool resizeable() noexcept
         {

@@ -966,7 +966,7 @@ void char_arr_test()
             // {312, 257}                       // wchar_t e[2]
         };
 
-        std::vector<uint8_t> buffer{};
+        std::vector<int8_t> buffer{};
         [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize(buffer, storage);
         ASSERT(ser_result);
         ASSERT(ser_result.code == ResultCode::OK);
@@ -980,7 +980,7 @@ void char_arr_test()
         // ---- checksum ----
         crc32c_t checksum = update_crc32c_checksum(
             Initial_CRC32C,
-            &buffer[detail::MagicOffset],
+            reinterpret_cast<uint8_t*>(&buffer[detail::MagicOffset]),
             detail::MagicSize
         );
 
@@ -990,13 +990,13 @@ void char_arr_test()
         // data size
         checksum = update_crc32c_checksum(
             checksum,
-            &buffer[detail::DataOffset],
+            reinterpret_cast<uint8_t*>(&buffer[detail::DataOffset]),
             24
         );
 
         checksum = update_crc32c_checksum(
             checksum,
-            &buffer[detail::DataLengthOffset],
+            reinterpret_cast<uint8_t*>(&buffer[detail::DataLengthOffset]),
             detail::DataLengthSize
         );
 
@@ -1212,6 +1212,13 @@ void error_test()
     using namespace infra::binary_serialization;
 
     // 文件损坏测试
+
+    // 数据类型必须是1B
+    // {
+    //     Storage storage{};
+    //     std::vector<uint32_t> buffer{};
+    //     serialize(buffer, storage);
+    // }
 
     // magic error
     {

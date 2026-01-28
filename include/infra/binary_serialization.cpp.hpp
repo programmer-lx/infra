@@ -251,9 +251,7 @@ namespace infra::binary_serialization
     class Reader;
 
     // 需要实现接口:
-    // using  byte_type     = value type of ByteContainer;
-    // using  writer_type   = Writer<ByteContainer>;
-    // using  reader_type   = Reader<ByteContainer>;
+    // using   byte_type    = value type of ByteContainer, sizeof(byte_type) == 1, such as uint8_t, std::byte;
     // static               size_t       size(const ByteContainer& container)
     // static               ByteType*    data(ByteContainer& container)
     // static  const        ByteType*    data(const ByteContainer& container)
@@ -564,6 +562,7 @@ namespace infra::binary_serialization
     Result serialize(ByteContainer& byte_array, const Object& object)
     {
         using adaptor_t = Adaptor<ByteContainer>;
+        static_assert(is_1byte<typename adaptor_t::byte_type>, "you must use a byte container.");
         
         Result result{};
 
@@ -574,7 +573,7 @@ namespace infra::binary_serialization
             return result;
         }
 
-        typename adaptor_t::writer_type writer(byte_array);
+        Writer<ByteContainer> writer(byte_array);
 
         // save magic
         writer << detail::MagicValue;
@@ -630,6 +629,7 @@ namespace infra::binary_serialization
     Result deserialize(const ByteContainer& byte_array, Object& object)
     {
         using adaptor_t = Adaptor<ByteContainer>;
+        static_assert(is_1byte<typename adaptor_t::byte_type>, "you must use a byte container.");
 
         Result result{};
 
@@ -639,7 +639,7 @@ namespace infra::binary_serialization
             return result;
         }
 
-        typename adaptor_t::reader_type reader(byte_array);
+        Reader<ByteContainer> reader(byte_array);
 
         // magic
         decltype(std::declval<detail::Header>().magic) magic = {};

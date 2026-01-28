@@ -38,6 +38,13 @@ static_assert(CHAR_BIT == 8, "char bit MUST == 8");
 |   4    |  data length |    4B     | 数据长度      |
 |   8    |  checksum    |    4B     | CRC32校验值  |
 |   12   |   data       |    Rest   | 实际序列化数据 |
+
+开发者在实际使用库的时候，建议在每一个序列化的结构体中添加以下字段:
+1. version;         (当文件字段发生变更，比如增加或删减，可以通过version来识别)
+2. type_id;         (用于判断文件所存储的对象是否是自己想要反序列化的对象)
+
+有的人喜欢使用uint32_t来作为version，但是有的人喜欢使用uint64_t，基础库不应该限定version的类型
+type_id，infra库就更加没办法限定了，因为他可能是整数，也可能是字符串，取决于业务逻辑
  */
 namespace infra::binary_serialization
 {
@@ -601,7 +608,7 @@ namespace infra::binary_serialization
 
         // data
         writer.jump(detail::DataOffset);
-        to_bytes(writer, object);
+        writer << object;
         result_code = writer.get_result();
         if (result_code != ResultCode::OK)
         {
@@ -683,7 +690,7 @@ namespace infra::binary_serialization
         }
 
         // data
-        from_bytes(reader, object);
+        reader >> object;
         const ResultCode result_code = reader.get_result();
         if (result_code != ResultCode::OK)
         {

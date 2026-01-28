@@ -201,6 +201,9 @@ namespace infra::binary_serialization
         is_serializable_char<T>     ||
         is_serializable_enum<T>;
 
+    template<typename T>
+    concept is_structure = std::is_class_v<std::remove_cv_t<T>>;
+
     template <typename T>
     concept is_1byte = (sizeof(T) == 1) && is_value<T>;
     
@@ -212,16 +215,13 @@ namespace infra::binary_serialization
         template<typename T, std::size_t N>
         struct is_c_arr_impl<T[N]>
         {
-            static constexpr bool value = is_c_arr_impl<T>::value || is_value<T> || is_bool<T>;
+            static constexpr bool value = is_c_arr_impl<T>::value || is_value<T> || is_bool<T> || is_structure<T>;
         };
     }
     
     // N维C数组
     template<typename T>
     concept is_c_array = std::is_array_v<std::remove_cv_t<T>> && detail::is_c_arr_impl<std::remove_cv_t<T>>::value;
-
-    template<typename T>
-    concept is_structure = std::is_class_v<std::remove_cv_t<T>>;
 
     enum class ResultCode
     {
@@ -579,19 +579,21 @@ namespace infra::binary_serialization
         }
     };
 
-    template<typename ContainerAdaptor, typename ByteContainer, typename Object>
+    template<typename ByteContainer, typename Object>
     Result serialize(ByteContainer& byte_array, const Object& object)
     {
+        using adaptor_t = Adaptor<ByteContainer>;
+        
         Result result{};
 
-        ContainerAdaptor::resize(byte_array, detail::DataOffset);
-        if (ContainerAdaptor::size(byte_array) < detail::DataOffset)
+        adaptor_t::resize(byte_array, detail::DataOffset);
+        if (adaptor_t::size(byte_array) < detail::DataOffset)
         {
             result.code = ResultCode::ByteContainerTooSmall;
             return result;
         }
 
-        typename ContainerAdaptor::writer_type writer(byte_array);
+        typename adaptor_t::writer_type writer(byte_array);
 
         // save magic
         writer << detail::MagicValue;
@@ -643,18 +645,20 @@ namespace infra::binary_serialization
         return result;
     }
 
-    template<typename ContainerAdaptor, typename ByteContainer, typename Object>
+    template<typename ByteContainer, typename Object>
     Result deserialize(const ByteContainer& byte_array, Object& object)
     {
+        using adaptor_t = Adaptor<ByteContainer>;
+
         Result result{};
 
-        if (ContainerAdaptor::size(byte_array) <= detail::DataOffset)
+        if (adaptor_t::size(byte_array) <= detail::DataOffset)
         {
             result.code = ResultCode::ByteContainerTooSmall;
             return result;
         }
 
-        typename ContainerAdaptor::reader_type reader(byte_array);
+        typename adaptor_t::reader_type reader(byte_array);
 
         // magic
         decltype(std::declval<detail::Header>().magic) magic = {};
@@ -670,7 +674,7 @@ namespace infra::binary_serialization
         reader >> data_length;
 
         // byte_array的容量一定要比文件大
-        if (ContainerAdaptor::size(byte_array) < data_length + detail::DataOffset)
+        if (adaptor_t::size(byte_array) < data_length + detail::DataOffset)
         {
             result.code = ResultCode::ByteContainerTooSmall;
             return result;

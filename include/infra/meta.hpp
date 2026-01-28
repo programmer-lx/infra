@@ -11,7 +11,7 @@ namespace infra::meta
     namespace detail
     {
         template<typename Fn>
-        static constexpr bool is_callable_object_v =
+        INFRA_HEADER_GLOBAL_CONSTEXPR bool is_callable_object_v =
             std::is_class_v<Fn> &&
             !std::is_function_v<Fn> &&
             !std::is_member_function_pointer_v<Fn> &&
@@ -70,10 +70,10 @@ namespace infra::meta
     using callable_class_t = typename callable_traits<Fn>::class_type;
 
     template<typename Fn>
-    static constexpr bool callable_is_member_function_v = callable_traits<Fn>::is_member_function;
+    INFRA_HEADER_GLOBAL_CONSTEXPR bool callable_is_member_function_v = callable_traits<Fn>::is_member_function;
 
     template<typename Fn>
-    static constexpr size_t callable_arg_count_v = callable_traits<Fn>::arg_count;
+    INFRA_HEADER_GLOBAL_CONSTEXPR size_t callable_arg_count_v = callable_traits<Fn>::arg_count;
 
     #pragma endregion
 
@@ -106,7 +106,7 @@ namespace infra::meta
     struct is_specialization_of<Template<Args...>, Template> : std::true_type {};
 
     template<typename Instance, template<typename...> typename Template>
-    static constexpr bool is_specialization_of_v = is_specialization_of<Instance, Template>::value;
+    INFRA_HEADER_GLOBAL_CONSTEXPR bool is_specialization_of_v = is_specialization_of<Instance, Template>::value;
 
     #pragma endregion
 
@@ -119,7 +119,7 @@ namespace infra::meta
     };
 
     template<typename T, typename... Ts>
-    static constexpr bool is_any_type_of_v = is_any_type_of<T, Ts...>::value;
+    INFRA_HEADER_GLOBAL_CONSTEXPR bool is_any_type_of_v = is_any_type_of<T, Ts...>::value;
 
     template<typename T, typename... Ts>
     struct is_all_type_of
@@ -128,7 +128,7 @@ namespace infra::meta
     };
 
     template<typename T, typename... Ts>
-    static constexpr bool is_all_type_of_v = is_all_type_of<T, Ts...>::value;
+    INFRA_HEADER_GLOBAL_CONSTEXPR bool is_all_type_of_v = is_all_type_of<T, Ts...>::value;
 
     #pragma endregion
 

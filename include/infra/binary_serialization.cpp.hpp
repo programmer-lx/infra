@@ -19,11 +19,11 @@
 #include <bit> // bit_cast
 #include <limits> // is_iec559
 
-#include "arch.hpp"
-#include "meta.hpp"
-#include "assert.hpp"
-#include "attributes.hpp"
-#include "endian.hpp"
+#include "infra/common.hpp"
+#include "infra/arch.hpp"
+#include "infra/meta.hpp"
+#include "infra/attributes.hpp"
+#include "infra/endian.hpp"
 
 
 // static check
@@ -42,7 +42,7 @@ static_assert(CHAR_BIT == 8, "char bit MUST == 8");
 namespace infra::binary_serialization
 {
     using crc32c_t = uint32_t;
-    static constexpr crc32c_t Initial_CRC32C = 0;
+    INFRA_HEADER_GLOBAL_CONSTEXPR crc32c_t Initial_CRC32C = 0;
 
     using data_length_t = uint32_t;
 
@@ -57,17 +57,17 @@ namespace infra::binary_serialization
         static_assert(sizeof(Header) == 12);
         INFRA_END_PACKED_STRUCT
 
-        static constexpr size_t MagicOffset = offsetof(Header, magic);
-        static constexpr size_t MagicSize = sizeof(std::declval<Header>().magic);
-        static constexpr uint8_t MagicValue[4] = { 'I', 'n', 'F', 'r' };
+        INFRA_HEADER_GLOBAL_CONSTEXPR size_t MagicOffset = offsetof(Header, magic);
+        INFRA_HEADER_GLOBAL_CONSTEXPR size_t MagicSize = sizeof(std::declval<Header>().magic);
+        INFRA_HEADER_GLOBAL_CONSTEXPR uint8_t MagicValue[4] = { 'I', 'n', 'F', 'r' };
 
-        static constexpr size_t DataLengthOffset = offsetof(Header, data_length);
-        static constexpr size_t DataLengthSize = sizeof(data_length_t);
+        INFRA_HEADER_GLOBAL_CONSTEXPR size_t DataLengthOffset = offsetof(Header, data_length);
+        INFRA_HEADER_GLOBAL_CONSTEXPR size_t DataLengthSize = sizeof(data_length_t);
 
-        static constexpr size_t ChecksumOffset = offsetof(Header, checksum);
-        static constexpr size_t ChecksumSize = sizeof(crc32c_t);
+        INFRA_HEADER_GLOBAL_CONSTEXPR size_t ChecksumOffset = offsetof(Header, checksum);
+        INFRA_HEADER_GLOBAL_CONSTEXPR size_t ChecksumSize = sizeof(crc32c_t);
 
-        static constexpr size_t DataOffset = sizeof(Header);
+        INFRA_HEADER_GLOBAL_CONSTEXPR size_t DataOffset = sizeof(Header);
         static_assert(DataOffset == 12);
     }
 
@@ -75,7 +75,7 @@ namespace infra::binary_serialization
     namespace detail
     {
 #if INFRA_ARCH_X86
-        INFRA_BINARY_SERIALIZATION_API INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2
+        INFRA_BINARY_SERIALIZATION_API INFRA_FUNC_ATTR_INTRINSICS_SSE4_2
         crc32c_t update_crc32c_checksum_x86(
             crc32c_t origin,
             const uint8_t* data,
@@ -84,17 +84,18 @@ namespace infra::binary_serialization
 #endif
 
 #if INFRA_ARCH_ARM
-        INFRA_BINARY_SERIALIZATION_API crc32c_t update_crc32c_checksum_arm(
+        INFRA_BINARY_SERIALIZATION_API
+        crc32c_t update_crc32c_checksum_arm(
             crc32c_t origin,
             const uint8_t* data,
             size_t size
         ) noexcept;
 #endif
 
-        static constexpr crc32c_t CRC32C_POLY = 0x82F63B78;
-
-        static consteval std::array<crc32c_t, 256> make_crc32c_table()
+        consteval std::array<crc32c_t, 256> make_crc32c_table()
         {
+            constexpr crc32c_t CRC32C_POLY = 0x82F63B78;
+
             std::array<crc32c_t, 256> table{};
 
             for (crc32c_t i = 0; i < 256; i++)
@@ -112,9 +113,9 @@ namespace infra::binary_serialization
             return table;
         }
 
-        static constexpr auto crc32c_table = make_crc32c_table();
+        INFRA_HEADER_GLOBAL_CONSTEXPR auto crc32c_table = make_crc32c_table();
 
-        inline crc32c_t update_crc32c_checksum_scalar(
+        INFRA_HEADER_GLOBAL crc32c_t update_crc32c_checksum_scalar(
             crc32c_t origin,
             const uint8_t* data,
             size_t size
@@ -133,7 +134,7 @@ namespace infra::binary_serialization
 
         INFRA_BINARY_SERIALIZATION_API bool support_crc32_intrinsic() noexcept;
     }
-    inline crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept
+    INFRA_HEADER_GLOBAL crc32c_t update_crc32c_checksum(crc32c_t origin, const uint8_t* data, size_t size) noexcept
     {
         // 统一进行cpuid检查，如果支持使用原生指令进行计算，则使用，否则使用fallback标量版本
         static bool support = detail::support_crc32_intrinsic();
@@ -249,10 +250,10 @@ namespace infra::binary_serialization
     // using  reader_type   = Reader<ByteContainer>;
     // static               size_t       size(const ByteContainer& container)
     // static               ByteType*    data(ByteContainer& container)
-    // static const         ByteType*    data(const ByteContainer& container)
+    // static  const        ByteType*    data(const ByteContainer& container)
     // static               void         resize(ByteContainer& vec, size_t new_size)
     // static               void         push_back(ByteContainer& vec, const ByteType& val)
-    // static constexpr     bool         resizeable() - (类似于std::array的容器，返回false，类似于std::vector的容器，返回true)
+    // static  constexpr    bool         resizeable() - (类似于std::array的容器，返回false，类似于std::vector的容器，返回true)
     template<typename ByteContainer>
     struct Adaptor;
 
@@ -743,7 +744,7 @@ namespace infra::binary_serialization
 #endif // ARCH X86
 
 #if INFRA_ARCH_X86
-        INFRA_NOINLINE INFRA_FUNC_ATTR_INTRINSICS_SSE4_2 crc32c_t update_crc32c_checksum_x86(
+        crc32c_t update_crc32c_checksum_x86(
             crc32c_t origin,
             const uint8_t* data,
             size_t size

@@ -5,17 +5,19 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "infra/common.hpp"
+
 namespace infra::encoding
 {
     namespace detail
     {
-        constexpr uint32_t to_u32(wchar_t c) noexcept
+        INFRA_HEADER_GLOBAL_CONSTEXPR uint32_t to_u32(wchar_t c) noexcept
         {
             return static_cast<uint32_t>(static_cast<std::make_unsigned_t<wchar_t>>(c));
         }
     }
 
-    inline size_t utf8_to_wide(
+    INFRA_HEADER_GLOBAL size_t utf8_to_wide(
         const char8_t* src, size_t src_byte_size,
               wchar_t* dst, size_t dst_char_size
     ) noexcept
@@ -83,7 +85,7 @@ namespace infra::encoding
         return needed;
     }
 
-    inline size_t wide_to_utf8(
+    INFRA_HEADER_GLOBAL size_t wide_to_utf8(
         const wchar_t* src, size_t src_char_size,
               char8_t* dst, size_t dst_byte_size
     ) noexcept

@@ -5,6 +5,8 @@
 #include <bit> // std::endian
 #include <utility> // std::swap
 
+#include "infra/common.hpp"
+
 namespace infra::endian
 {
     enum class Endian
@@ -13,7 +15,7 @@ namespace infra::endian
         Big         // 大端序 (数据高位在低地址，低位在高地址)
     };
 
-    static constexpr Endian Current =
+    INFRA_HEADER_GLOBAL_CONSTEXPR Endian Current =
         (std::endian::native == std::endian::little)
             ? Endian::Little
             : Endian::Big;
@@ -24,7 +26,7 @@ namespace infra::endian
 
     namespace detail
     {
-        inline void reverse_bytes(void* data, size_t size) noexcept
+        INFRA_HEADER_GLOBAL void reverse_bytes(void* data, size_t size) noexcept
         {
             if (size <= 1)
             {
@@ -44,7 +46,7 @@ namespace infra::endian
         }
     }
 
-    inline void to_little(void* data, size_t size) noexcept
+    INFRA_HEADER_GLOBAL void to_little(void* data, size_t size) noexcept
     {
         if constexpr (Current == Endian::Big)
         {
@@ -52,7 +54,7 @@ namespace infra::endian
         }
     }
 
-    inline void to_big(void* data, size_t size) noexcept
+    INFRA_HEADER_GLOBAL void to_big(void* data, size_t size) noexcept
     {
         if constexpr (Current == Endian::Little)
         {
@@ -60,7 +62,7 @@ namespace infra::endian
         }
     }
 
-    inline Endian runtime_check() noexcept
+    INFRA_HEADER_GLOBAL Endian runtime_check() noexcept
     {
         volatile uint32_t data = 0x01020304;
         auto ptr = reinterpret_cast<volatile uint8_t*>(&data);

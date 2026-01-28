@@ -4,10 +4,11 @@
 #include <cstddef>
 
 #include "infra/detail/os_detect.hpp"
+#include "infra/common.hpp"
 
 namespace infra::memory
 {
-    inline void* aligned_malloc(size_t size, size_t alignment) noexcept
+    INFRA_HEADER_GLOBAL void* aligned_malloc(size_t size, size_t alignment) noexcept
     {
 #if INFRA_OS_WINDOWS
         return _aligned_malloc(size, alignment);
@@ -21,7 +22,7 @@ namespace infra::memory
 #endif
     }
 
-    inline void aligned_free(void* memory) noexcept
+    INFRA_HEADER_GLOBAL void aligned_free(void* memory) noexcept
     {
 #if INFRA_OS_WINDOWS
         _aligned_free(memory);

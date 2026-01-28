@@ -62,11 +62,6 @@ namespace infra::cpu
         unsigned neon           : 1 = 0;
     };
 
-    namespace detail
-    {
-        INFRA_CPU_API Info info_impl() noexcept;
-    }
-
     INFRA_CPU_API Info info() noexcept;
     INFRA_CPU_API void pause() noexcept;
 }
@@ -83,7 +78,7 @@ namespace infra::cpu
 
 #include <type_traits>
 
-#include "arch.hpp"
+#include "infra/arch.hpp"
 
 #if INFRA_ARCH_X86
     #if defined(_MSC_VER)
@@ -94,8 +89,9 @@ namespace infra::cpu
     #include <emmintrin.h>
 #endif
 
-#include "compiler.hpp"
-#include "attributes.hpp"
+#include "infra/common.hpp"
+#include "infra/compiler.hpp"
+#include "infra/attributes.hpp"
 
 namespace infra::cpu
 {

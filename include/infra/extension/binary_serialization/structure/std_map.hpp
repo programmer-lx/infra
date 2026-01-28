@@ -12,7 +12,7 @@ namespace infra::binary_serialization
         const std::map<Key, Value, Compare, Allocator>& m
     ) noexcept
     {
-        const uint64_t size = m.size();
+        const uint64_t size = static_cast<uint64_t>(m.size());
         writer << size;
 
         for (const auto& [k, v] : m)

@@ -6,7 +6,7 @@
 
 namespace infra::binary_serialization
 {
-    template<is_1byte ByteType, size_t N>
+    template<is_byte_type ByteType, size_t N>
     struct Adaptor<std::array<ByteType, N>>
     {
         using byte_type = ByteType;

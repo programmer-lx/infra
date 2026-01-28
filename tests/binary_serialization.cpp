@@ -501,6 +501,10 @@ struct OneByteStruct
     uint8_t v;
 };
 
+enum MyByte : uint8_t {};
+enum MySByte : int8_t {};
+enum class MyByteClass : uint8_t {};
+
 void traits_test()
 {
     using namespace infra::binary_serialization;
@@ -521,8 +525,13 @@ void traits_test()
     static_assert(is_structure<Storage>);
     static_assert(!is_structure<int>);
 
-    static_assert(!is_1byte<bool>);
-    static_assert(!is_1byte<OneByteStruct>);
+    static_assert(is_byte_type<MyByte>);
+    static_assert(is_byte_type<MyByteClass>);
+    static_assert(!is_byte_type<MySByte>);
+    static_assert(!is_byte_type<int8_t>);
+    static_assert(!is_byte_type<bool>);
+    static_assert(!is_byte_type<OneByteStruct>);
+
 
     static_assert(sizeof(int[3][4])== sizeof(int) * 12);
 
@@ -966,7 +975,7 @@ void char_arr_test()
             // {312, 257}                       // wchar_t e[2]
         };
 
-        std::vector<int8_t> buffer{};
+        std::vector<uint8_t> buffer{};
         [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize(buffer, storage);
         ASSERT(ser_result);
         ASSERT(ser_result.code == ResultCode::OK);
@@ -1071,7 +1080,7 @@ void char_arr_test()
     }
 }
 
-// total = 174B
+// total = 190B
 struct Storage_CArr
 {
     char a[2][3];       // 6B
@@ -1079,7 +1088,7 @@ struct Storage_CArr
     int64_t c;          // 8B
     int32_t d[2][2][3]; // 48B
     Storage e[2][3];    // 16*6=96B
-    // total = 174B
+    std::vector<uint32_t> f[2]; // 4*2 * 2 = 16B
 };
 
 namespace infra::binary_serialization
@@ -1095,6 +1104,7 @@ namespace infra::binary_serialization
         reader >> (storage.c);
         reader >> (storage.d);
         reader >> (storage.e);
+        reader >> storage.f;
     }
 
     template<typename ByteContainer>
@@ -1108,6 +1118,7 @@ namespace infra::binary_serialization
         writer << (storage.c);
         writer << (storage.d);
         writer << (storage.e);
+        writer << storage.f;
     }
 }
 
@@ -1123,6 +1134,8 @@ void c_arr_test()
             { {{1,2,3}, {4,5,6}}, {{7,8,9}, {10,11,12}} }, // int32_t d[2][2][3]
             { { {1,2,3}, {4,5,6}, {7,8,9} }, { {10,11,12}, {13,14,15}, {16,17,18} } } // Storage e[2][3]
         };
+        storage.f[0] = { 99, 98 };
+        storage.f[1] = { 97, 96 };
 
         std::vector<std::byte> buffer{};
         [[maybe_unused]] auto ser_result = infra::binary_serialization::serialize(buffer, storage);
@@ -1137,7 +1150,7 @@ void c_arr_test()
 
         // data length
         data_length_t data_length = *std::bit_cast<uint8_t*>(&buffer[detail::DataLengthOffset]);
-        ASSERT(data_length == 174);
+        ASSERT(data_length == 190 + 8 + 8); // 两个8用于记录vector长度
 
         // ---- checksum ----
         crc32c_t checksum = update_crc32c_checksum(
@@ -1150,7 +1163,7 @@ void c_arr_test()
         checksum = update_crc32c_checksum(
             checksum,
             std::bit_cast<uint8_t*>(&buffer[detail::DataOffset]),
-            174
+            190 + 8 + 8
         );
 
         checksum = update_crc32c_checksum(
@@ -1204,7 +1217,37 @@ void c_arr_test()
                 ASSERT(back.e[i][j].b == storage.e[i][j].b);
                 ASSERT(back.e[i][j].c == storage.e[i][j].c);
             }
+
+        // vector<uint32_t> f[2] 每个vector有两个元素
+        for (int i = 0; i < 2; ++i)
+        {
+            for (size_t j = 0; j < 2; ++j)
+            {
+                ASSERT(back.f[i][j] == storage.f[i][j]);
+            }
+        }
     }
+}
+
+enum class CustomByte : uint8_t {};
+
+void custom_byte_type_test()
+{
+    Storage storage{};
+    storage.a = 2;
+    storage.b = 3;
+    storage.c = 4;
+
+    std::vector<CustomByte> buffer{};
+    auto result = infra::binary_serialization::serialize(buffer, storage);
+    ASSERT(result);
+    ASSERT(result.code == infra::binary_serialization::ResultCode::OK);
+
+    Storage back{};
+    result = infra::binary_serialization::deserialize(buffer, back);
+    ASSERT(back.a == 2);
+    ASSERT(back.b == 3);
+    ASSERT(back.c == 4);
 }
 
 void error_test()
@@ -1923,6 +1966,7 @@ int main()
         dyn_array_test();
         char_arr_test();
         c_arr_test();
+        custom_byte_type_test();
         error_test();
         custom_structure_test();
         bool_test();

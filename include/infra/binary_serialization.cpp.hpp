@@ -203,9 +203,6 @@ namespace infra::binary_serialization
 
     template<typename T>
     concept is_structure = std::is_class_v<std::remove_cv_t<T>>;
-
-    template <typename T>
-    concept is_1byte = (sizeof(T) == 1) && is_value<T>;
     
     namespace detail
     {
@@ -222,6 +219,13 @@ namespace infra::binary_serialization
     // N维C数组
     template<typename T>
     concept is_c_array = std::is_array_v<std::remove_cv_t<T>> && detail::is_c_arr_impl<std::remove_cv_t<T>>::value;
+
+    // byte type (必须是无符号整数类型或enum && size == 1)
+    template <typename T>
+    concept is_byte_type =
+        (std::is_enum_v<T> || meta::is_numeric_integer_v<T>) &&
+        std::is_unsigned_v<meta::integral_underlying_type_t<T>> &&
+        (sizeof(meta::integral_underlying_type_t<T>) == 1);
 
     enum class ResultCode
     {
@@ -562,7 +566,7 @@ namespace infra::binary_serialization
     Result serialize(ByteContainer& byte_array, const Object& object)
     {
         using adaptor_t = Adaptor<ByteContainer>;
-        static_assert(is_1byte<typename adaptor_t::byte_type>, "you must use a byte container.");
+        static_assert(is_byte_type<typename adaptor_t::byte_type>, "you must use a byte(unsigned) container.");
         
         Result result{};
 
@@ -629,7 +633,7 @@ namespace infra::binary_serialization
     Result deserialize(const ByteContainer& byte_array, Object& object)
     {
         using adaptor_t = Adaptor<ByteContainer>;
-        static_assert(is_1byte<typename adaptor_t::byte_type>, "you must use a byte container.");
+        static_assert(is_byte_type<typename adaptor_t::byte_type>, "you must use a byte(unsigned) container.");
 
         Result result{};
 

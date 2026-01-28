@@ -132,6 +132,51 @@ namespace infra::meta
 
     #pragma endregion
 
+    #pragma region integer_or_enum 整数或枚举
+
+    // 数值整数，就是 (u)int(n)。bool, char8_t等不算
+    template<typename T>
+    struct is_numeric_integer
+    {
+        static constexpr bool value = is_any_type_of_v<std::remove_cv_t<T>,
+            uint8_t, int8_t,
+            uint16_t, int16_t,
+            uint32_t, int32_t,
+            uint64_t, int64_t
+        >;
+    };
+
+    template<typename T>
+    INFRA_HEADER_GLOBAL_CONSTEXPR bool is_numeric_integer_v = is_numeric_integer<T>::value;
+
+    // T is enum            : 返回enum的底层整数类型
+    // T is numeric integer : 返回他本身
+    template<typename T, typename = void>
+    struct integral_underlying_type
+    {
+        static_assert(
+            std::is_enum_v<T> || is_numeric_integer_v<T>,
+            "integral_underlying_type<T>: T must be enum or numeric integer"
+        );
+    };
+
+    template<typename T>
+    struct integral_underlying_type<T, std::enable_if_t<std::is_enum_v<T>>>
+    {
+        using type = std::underlying_type_t<T>;
+    };
+
+    template<typename T>
+    struct integral_underlying_type<T, std::enable_if_t<is_numeric_integer_v<T>>>
+    {
+        using type = T;
+    };
+
+    template<typename T>
+    using integral_underlying_type_t = typename integral_underlying_type<T>::type;
+
+    #pragma endregion
+
     #pragma region type_list 类型列表
 
     template<typename... Ts>

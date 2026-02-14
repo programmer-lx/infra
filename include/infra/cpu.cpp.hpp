@@ -125,46 +125,39 @@ namespace infra::cpu
 #if INFRA_ARCH_X86
     namespace detail
     {
-        // 首先需要读取 EAX 1 寄存器，接下来才能用下面的枚举判断
-        enum class CpuFeatureIndex_EAX1 : uint32_t
+        enum class CpuFeatureIndex_EAX1_ECX0 : uint32_t
         {
             // see https://en.wikipedia.org/wiki/CPUID
 
-            // ECX 寄存器的 feature
-            SSE3        = 0 , // EAX 1, ECX  0
-            SSSE3       = 9 , // EAX 1, ECX  9
-            FMA3        = 12, // EAX 1, ECX 12
-            SSE4_1      = 19, // EAX 1, ECX 19
-            SSE4_2      = 20, // EAX 1, ECX 20
-            AES_NI      = 25, // EAX 1, ECX 25
-            XSAVE       = 26, // EAX 1, ECX 26
-            OS_XSAVE    = 27, // EAX 1, ECX 27
-            AVX         = 28, // EAX 1, ECX 28
-            F16C        = 29, // EAX 1, ECX 29
+            // ECX
+            SSE3        = 0 , // EAX 1 ECX 0, ECX  0
+            SSSE3       = 9 , // EAX 1 ECX 0, ECX  9
+            FMA3        = 12, // EAX 1 ECX 0, ECX 12
+            SSE4_1      = 19, // EAX 1 ECX 0, ECX 19
+            SSE4_2      = 20, // EAX 1 ECX 0, ECX 20
+            AES_NI      = 25, // EAX 1 ECX 0, ECX 25
+            XSAVE       = 26, // EAX 1 ECX 0, ECX 26
+            OS_XSAVE    = 27, // EAX 1 ECX 0, ECX 27
+            AVX         = 28, // EAX 1 ECX 0, ECX 28
+            F16C        = 29, // EAX 1 ECX 0, ECX 29
 
-            // EDX 寄存器的 feature
-            FXSR        = 24, // EAX 1, EDX 24
-            SSE         = 25, // EAX 1, EDX 25
-            SSE2        = 26, // EAX 1, EDX 26
+            // EDX
+            FXSR        = 24, // EAX 1 ECX 0, EDX 24
+            SSE         = 25, // EAX 1 ECX 0, EDX 25
+            SSE2        = 26, // EAX 1 ECX 0, EDX 26
         };
 
-        enum class CpuFeatureIndex_EAX7 : uint32_t
+        enum class CpuFeatureIndex_EAX7_ECX0 : uint32_t
         {
             // EBX
-            AVX2        = 5 , // EAX 7, EBX  5
-            AVX_512_F   = 16, // EAX 7, EBX 16
-            SHA         = 29, // EAX 7, EBX 29
+            AVX2        = 5 , // EAX 7 ECX 0, EBX  5
+            AVX_512_F   = 16, // EAX 7 ECX 0, EBX 16
+            SHA         = 29, // EAX 7 ECX 0, EBX 29
         };
 
         enum class CpuXSaveStateIndex : uint64_t
         {
             // see https://en.wikipedia.org/wiki/CPUID XSAVE State-components
-
-            // bit 1: SSE state: XMM0-XMM15 and MXCSR
-            // bit 2: AVX: YMM0-YMM15
-            // bit 5: AVX-512: opmask registers k0-k7
-            // bit 6: AVX-512: ZMM_Hi256 ZMM0-ZMM15
-            // bit 7: AVX-512: Hi16_ZMM ZMM16-ZMM31
 
             SSE                 = 1 , // XMM0-XMM15 and MXCSR
             AVX                 = 2 , // YMM0-YMM15
@@ -229,7 +222,7 @@ namespace infra::cpu
         bool os_support_avx = false;
         uint32_t eax1_ecx0_edx = 0; // EAX 1, ECX 0 的 EDX 值
 
-        // ------------------ EAX 0 ------------------
+        // ------------------ EAX 0 ECX 0 ------------------
         // if (max_leaf >= 0)
         {
             // vendor name
@@ -255,7 +248,7 @@ namespace infra::cpu
             }
         }
 
-        // ------------------ EAX 1 ------------------
+        // ------------------ EAX 1 ECX 0 ------------------
         if (max_leaf >= 1)
         {
             // EAX 1, ECX 0
@@ -268,19 +261,19 @@ namespace infra::cpu
             result.logical_cores = (ebx >> 16) & 0xff; // EBX[23:16]
 
             // ------------------------- FXSR -------------------------
-            result.fxsr = detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::FXSR);
+            result.fxsr = detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1_ECX0::FXSR);
 
             // ------------------------- SSE family -------------------------
-            result.sse = result.fxsr && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::SSE);
-            result.sse2 = result.sse && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1::SSE2);
-            result.sse3 = result.sse2 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE3);
-            result.ssse3 = result.sse3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSSE3);
-            result.sse4_1 = result.ssse3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE4_1);
-            result.sse4_2 = result.sse4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::SSE4_2);
+            result.sse = result.fxsr && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1_ECX0::SSE);
+            result.sse2 = result.sse && detail::bit_is_open(edx, detail::CpuFeatureIndex_EAX1_ECX0::SSE2);
+            result.sse3 = result.sse2 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::SSE3);
+            result.ssse3 = result.sse3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::SSSE3);
+            result.sse4_1 = result.ssse3 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::SSE4_1);
+            result.sse4_2 = result.sse4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::SSE4_2);
 
             // ------------------------- XSAVE -------------------------
-            result.xsave = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::XSAVE);
-            result.os_xsave = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::OS_XSAVE);
+            result.xsave = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::XSAVE);
+            result.os_xsave = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::OS_XSAVE);
             // 只有在 xsave 和 os_xsave 为 true 的时候，才能进行 xgetbv 检查，AVX指令集才可用
             if (result.xsave && result.os_xsave)
             {
@@ -291,15 +284,15 @@ namespace infra::cpu
             os_support_avx = detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::SSE) &&
                              detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::AVX);
 
-            result.avx = result.sse4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::AVX) && os_support_avx;
-            result.f16c = result.avx && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::F16C);
-            result.fma3 = result.avx && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::FMA3);
+            result.avx = result.sse4_1 && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::AVX) && os_support_avx;
+            result.f16c = result.avx && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::F16C);
+            result.fma3 = result.avx && detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::FMA3);
 
             // other
-            result.aes_ni = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1::AES_NI);
+            result.aes_ni = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::AES_NI);
         }
 
-        // ------------------ EAX 4 ------------------
+        // ------------------ EAX 4 ECX 0 ------------------
         if (max_leaf >= 4)
         {
             detail::cpuid(4, 0, abcd);
@@ -311,14 +304,14 @@ namespace infra::cpu
             }
         }
 
-        // ------------------ EAX 7 ------------------
+        // ------------------ EAX 7 ECX 0 ------------------
         if (max_leaf >= 7)
         {
             // EAX 7, ECX 0
             detail::cpuid(7, 0, abcd);
             const uint32_t ebx = abcd[1];
 
-            result.avx2 = result.avx && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::AVX2);
+            result.avx2 = result.avx && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7_ECX0::AVX2);
 
 
             // ------------------------- AVX-512 family -------------------------
@@ -327,10 +320,10 @@ namespace infra::cpu
                                             detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::AVX_512_LOW_256) &&
                                             detail::bit_is_open(xcr0, detail::CpuXSaveStateIndex::AVX_512_HIGH_256);
 
-            result.avx512_f = result.avx2 && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::AVX_512_F) && os_support_avx_512;
+            result.avx512_f = result.avx2 && detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7_ECX0::AVX_512_F) && os_support_avx_512;
 
             // other
-            result.sha = detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7::SHA);
+            result.sha = detail::bit_is_open(ebx, detail::CpuFeatureIndex_EAX7_ECX0::SHA);
         }
 
         // ------------------------------------ ext ------------------------------------

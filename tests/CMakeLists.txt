@@ -1,5 +1,6 @@
 function(infra_add_test cpp_name)
     add_executable(${cpp_name} ${cpp_name}.cpp)
+    target_compile_features(${cpp_name} PRIVATE cxx_std_20)
 
     if(MSVC)
         target_compile_options(${cpp_name} PRIVATE /utf-8 /W4 /WX)

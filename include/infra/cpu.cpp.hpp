@@ -55,6 +55,7 @@ namespace infra::cpu
         unsigned avx512_f       : 1 = 0;
 
         // other
+        unsigned popcnt         : 1 = 0;
         unsigned aes_ni         : 1 = 0;
         unsigned sha            : 1 = 0;
 
@@ -135,6 +136,7 @@ namespace infra::cpu
             FMA3        = 12, // EAX 1 ECX 0, ECX 12
             SSE4_1      = 19, // EAX 1 ECX 0, ECX 19
             SSE4_2      = 20, // EAX 1 ECX 0, ECX 20
+            POPCNT      = 23, // EAX 1 ECX 0, ECX 23
             AES_NI      = 25, // EAX 1 ECX 0, ECX 25
             XSAVE       = 26, // EAX 1 ECX 0, ECX 26
             OS_XSAVE    = 27, // EAX 1 ECX 0, ECX 27
@@ -290,6 +292,7 @@ namespace infra::cpu
 
             // other
             result.aes_ni = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::AES_NI);
+            result.popcnt = detail::bit_is_open(ecx, detail::CpuFeatureIndex_EAX1_ECX0::POPCNT);
         }
 
         // ------------------ EAX 4 ECX 0 ------------------
